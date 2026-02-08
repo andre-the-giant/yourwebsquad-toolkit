@@ -1,0 +1,62 @@
+---
+import MainLayout from "@layouts/Main.astro";
+import { getContent, getCompany } from "@helpers/content";
+import { buildSeo, buildJsonLd } from "@helpers/seo";
+
+export async function getStaticPaths() {
+  return [{ params: { lang: "fr" } }, { params: { lang: "en" } }];
+}
+
+const { lang } = Astro.params;
+const locale = lang === "en" ? "en" : "fr";
+
+const content = await getContent(locale, "__SLUG__");
+const company = await getCompany("company");
+const contact = await getCompany("contact");
+const social = await getCompany("social");
+
+const path = `/${locale}/__SLUG__/`;
+const seo = buildSeo({
+  locale,
+  path,
+  overrides: content.seo,
+});
+
+const defaultLocation =
+  (company.locations || []).find((loc) => loc.isDefault) ||
+  company.locations?.[0];
+const primaryPhone =
+  contact.telephones?.find((t) => t.isPrimary)?.short ||
+  contact.telephones?.[0]?.short ||
+  "+33 2 31 00 00 00";
+const sameAs = (social.links || []).map((link) => link.url).filter(Boolean);
+const jsonLd = buildJsonLd({
+  locale,
+  path,
+  org: {
+    name: company.name,
+    url: company.url,
+    telephone: primaryPhone,
+    streetAddress: defaultLocation?.address?.street || contact.address?.street,
+    addressLocality: defaultLocation?.address?.city || contact.address?.city,
+    postalCode:
+      defaultLocation?.address?.postalCode || contact.address?.postalCode,
+    addressCountry:
+      defaultLocation?.address?.country || contact.address?.country,
+    geo: {
+      latitude: defaultLocation?.lat || company.lat,
+      longitude: defaultLocation?.lng || company.lng,
+    },
+  },
+  openingHours: contact.hours?.openingHours,
+  sameAs,
+  image: content.seo?.image || social.image?.url,
+});
+const seoPayload = { ...seo, jsonLd };
+---
+
+<MainLayout seo={seoPayload}>
+  <section class="content">
+    <h1>{content.seo?.title}</h1>
+  </section>
+</MainLayout>

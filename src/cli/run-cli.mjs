@@ -11,6 +11,9 @@ const requireFromToolkit = createRequire(import.meta.url);
 
 const COMMANDS = {
   clean: "scripts/clean.mjs",
+  scaffold: {
+    newpage: "scripts/newpage.mjs",
+  },
   quality: {
     run: "scripts/run-quality-suite.mjs",
     a11y: "scripts/pa11y-crawl-and-test.mjs",
@@ -29,6 +32,7 @@ function printHelp() {
   console.log("Usage:");
   console.log("  yws-toolkit clean [-- <args>]");
   console.log("  yws-toolkit format [--check] [-- <prettier args>]");
+  console.log("  yws-toolkit scaffold <newpage> [-- <args>]");
   console.log(
     "  yws-toolkit quality <run|a11y|seo|links|jsonld|comment> [-- <args>]",
   );
@@ -122,7 +126,11 @@ export function runCli(argv = []) {
     return;
   }
 
-  if (mainCommand === "quality" || mainCommand === "update") {
+  if (
+    mainCommand === "scaffold" ||
+    mainCommand === "quality" ||
+    mainCommand === "update"
+  ) {
     if (
       !maybeSubCommand ||
       maybeSubCommand === "-h" ||

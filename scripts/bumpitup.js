@@ -36,7 +36,10 @@ async function runQuiet(cmd, args, opts = {}) {
     await execa(cmd, args, { stdio: "ignore", ...opts });
   } catch (err) {
     // Rerun to surface output on failure
-    const { stdout = "", stderr = "" } = await execa(cmd, args, { ...opts, reject: false });
+    const { stdout = "", stderr = "" } = await execa(cmd, args, {
+      ...opts,
+      reject: false,
+    });
     const out = [stdout, stderr].filter(Boolean).join("\n").trim();
     throw new Error(out || err.shortMessage || err.message);
   }
@@ -47,7 +50,7 @@ function nextVersions(current) {
   return {
     patch: `${major}.${minor}.${patch + 1}`,
     minor: `${major}.${minor + 1}.0`,
-    major: `${major + 1}.0.0`
+    major: `${major + 1}.0.0`,
   };
 }
 
@@ -61,14 +64,18 @@ async function ensureOnBranch(target = "main") {
 async function ensureCleanGit() {
   const { stdout } = await execa("git", ["status", "--porcelain"]);
   if (stdout.trim()) {
-    throw new Error("Working tree is not clean. Commit or stash changes first.");
+    throw new Error(
+      "Working tree is not clean. Commit or stash changes first.",
+    );
   }
 }
 
 async function ensureRemote() {
   const { stdout } = await execa("git", ["remote"]);
   if (!stdout.trim()) {
-    throw new Error("No git remote configured. Add a remote before tagging/pushing.");
+    throw new Error(
+      "No git remote configured. Add a remote before tagging/pushing.",
+    );
   }
 }
 
@@ -86,9 +93,9 @@ async function main() {
         choices: [
           { name: `Patch (${candidates.patch})`, value: candidates.patch },
           { name: `Minor (${candidates.minor})`, value: candidates.minor },
-          { name: `Major (${candidates.major})`, value: candidates.major }
-        ]
-      }
+          { name: `Major (${candidates.major})`, value: candidates.major },
+        ],
+      },
     ]);
 
     await ensureRemote();
@@ -100,8 +107,8 @@ async function main() {
         type: "input",
         name: "note",
         message: "Tag notes (short sentence):",
-        default: ""
-      }
+        default: "",
+      },
     ]);
 
     pkg.version = versionChoice;
@@ -117,7 +124,9 @@ async function main() {
     const commitMsg = trimmedNote
       ? `chore: release v${versionChoice} - ${trimmedNote}`
       : `chore: release v${versionChoice}`;
-    const tagMsg = trimmedNote ? `v${versionChoice} - ${trimmedNote}` : `v${versionChoice}`;
+    const tagMsg = trimmedNote
+      ? `v${versionChoice} - ${trimmedNote}`
+      : `v${versionChoice}`;
 
     await execa("git", ["add", "-u"]);
     await execa("git", ["commit", "-m", commitMsg]);

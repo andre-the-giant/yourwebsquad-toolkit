@@ -3,9 +3,11 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, "..", "..");
+const requireFromToolkit = createRequire(import.meta.url);
 
 const COMMANDS = {
   clean: "scripts/clean.mjs",
@@ -26,6 +28,7 @@ const COMMANDS = {
 function printHelp() {
   console.log("Usage:");
   console.log("  yws-toolkit clean [-- <args>]");
+  console.log("  yws-toolkit format [--check] [-- <prettier args>]");
   console.log(
     "  yws-toolkit quality <run|a11y|seo|links|jsonld|comment> [-- <args>]",
   );
@@ -59,6 +62,42 @@ function runScript(scriptRelPath, args) {
   return result.status ?? 1;
 }
 
+function runFormat(args) {
+  let prettierBin;
+  let astroPlugin;
+  try {
+    prettierBin = requireFromToolkit.resolve("prettier/bin/prettier.cjs");
+    astroPlugin = requireFromToolkit.resolve("prettier-plugin-astro");
+  } catch (err) {
+    console.error(
+      `Unable to resolve formatter dependencies from toolkit: ${err.message}`,
+    );
+    return 1;
+  }
+
+  const forwarded = Array.isArray(args) ? [...args] : [];
+  const hasCheck = forwarded.includes("--check");
+  const hasWrite = forwarded.includes("--write");
+  if (!hasCheck && !hasWrite) {
+    forwarded.unshift("--write");
+  }
+  if (!forwarded.includes("--plugin")) {
+    forwarded.unshift(astroPlugin);
+    forwarded.unshift("--plugin");
+  }
+  const hasTarget = forwarded.some((arg) => !arg.startsWith("-"));
+  if (!hasTarget) {
+    forwarded.push(".");
+  }
+
+  const result = spawnSync(process.execPath, [prettierBin, ...forwarded], {
+    stdio: "inherit",
+    cwd: process.cwd(),
+    env: process.env,
+  });
+  return result.status ?? 1;
+}
+
 export function runCli(argv = []) {
   const [mainCommand, maybeSubCommand, ...rest] = argv;
 
@@ -72,6 +111,12 @@ export function runCli(argv = []) {
       resolveScript("clean"),
       [maybeSubCommand, ...rest].filter(Boolean),
     );
+    if (exitCode !== 0) process.exit(exitCode);
+    return;
+  }
+
+  if (mainCommand === "format") {
+    const exitCode = runFormat([maybeSubCommand, ...rest].filter(Boolean));
     if (exitCode !== 0) process.exit(exitCode);
     return;
   }

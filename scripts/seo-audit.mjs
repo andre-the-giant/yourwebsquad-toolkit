@@ -5,7 +5,8 @@ import path from "node:path";
 import { load as loadHtml } from "cheerio";
 
 const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
-const DEFAULT_REPORT_DIR = process.env.SEO_REPORT_DIR || path.join(process.cwd(), "reports/seo");
+const DEFAULT_REPORT_DIR =
+  process.env.SEO_REPORT_DIR || path.join(process.cwd(), "reports/seo");
 
 const args = parseArgs(process.argv.slice(2));
 const BASE_URL = args.base ?? DEFAULT_BASE_URL;
@@ -93,11 +94,18 @@ async function crawl() {
     $("a[href]").each((_, el) => {
       let href = $(el).attr("href");
       if (!href) return;
-      if (href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("#")) return;
+      if (
+        href.startsWith("mailto:") ||
+        href.startsWith("tel:") ||
+        href.startsWith("#")
+      )
+        return;
 
       let absolute;
       try {
-        absolute = href.startsWith("http") ? href : new URL(href, url).toString();
+        absolute = href.startsWith("http")
+          ? href
+          : new URL(href, url).toString();
       } catch {
         return;
       }
@@ -165,27 +173,41 @@ function runSeoChecks(url, html) {
 
   const htmlLang = $("html").attr("lang");
   if (!htmlLang) {
-    issues.push(makeIssue(url, "error", "html-lang-missing", "<html> lang attribute is missing."));
+    issues.push(
+      makeIssue(
+        url,
+        "error",
+        "html-lang-missing",
+        "<html> lang attribute is missing.",
+      ),
+    );
   }
 
   const title = $("title").text().trim();
   if (!title) {
-    issues.push(makeIssue(url, "error", "title-missing", "Page <title> is missing."));
+    issues.push(
+      makeIssue(url, "error", "title-missing", "Page <title> is missing."),
+    );
   } else if (title.length < 30 || title.length > 65) {
     issues.push(
       makeIssue(
         url,
         "warn",
         "title-length",
-        `Page <title> length is ${title.length}, recommended 30–65.`
-      )
+        `Page <title> length is ${title.length}, recommended 30–65.`,
+      ),
     );
   }
 
   const desc = $('meta[name="description"]').attr("content")?.trim() || "";
   if (!desc) {
     issues.push(
-      makeIssue(url, "error", "meta-description-missing", "Meta description is missing.")
+      makeIssue(
+        url,
+        "error",
+        "meta-description-missing",
+        "Meta description is missing.",
+      ),
     );
   } else if (desc.length < 50 || desc.length > 160) {
     issues.push(
@@ -193,21 +215,28 @@ function runSeoChecks(url, html) {
         url,
         "warn",
         "meta-description-length",
-        `Meta description length is ${desc.length}, recommended 50–160.`
-      )
+        `Meta description length is ${desc.length}, recommended 50–160.`,
+      ),
     );
   }
 
   const viewport = $('meta[name="viewport"]').attr("content") || "";
   if (!viewport) {
     issues.push(
-      makeIssue(url, "error", "viewport-missing", "Responsive viewport meta tag is missing.")
+      makeIssue(
+        url,
+        "error",
+        "viewport-missing",
+        "Responsive viewport meta tag is missing.",
+      ),
     );
   }
 
   const canonical = $('link[rel="canonical"]').attr("href");
   if (!canonical) {
-    issues.push(makeIssue(url, "warn", "canonical-missing", "Canonical link is missing."));
+    issues.push(
+      makeIssue(url, "warn", "canonical-missing", "Canonical link is missing."),
+    );
   } else {
     const normalizedCanon = normalizeUrl(new URL(canonical, url).toString());
     const normalizedUrl = normalizeUrl(url);
@@ -224,30 +253,34 @@ function runSeoChecks(url, html) {
     }
 
     const pathsMatch =
-      canonPath && pagePath ? canonPath === pagePath : normalizedCanon === normalizedUrl;
+      canonPath && pagePath
+        ? canonPath === pagePath
+        : normalizedCanon === normalizedUrl;
     if (!pathsMatch) {
       issues.push(
         makeIssue(
           url,
           "warn",
           "canonical-mismatch",
-          `Canonical (${normalizedCanon}) does not match page URL (${normalizedUrl}).`
-        )
+          `Canonical (${normalizedCanon}) does not match page URL (${normalizedUrl}).`,
+        ),
       );
     }
   }
 
   const h1s = $("h1");
   if (h1s.length === 0) {
-    issues.push(makeIssue(url, "error", "h1-missing", "No <h1> found on the page."));
+    issues.push(
+      makeIssue(url, "error", "h1-missing", "No <h1> found on the page."),
+    );
   } else if (h1s.length > 1) {
     issues.push(
       makeIssue(
         url,
         "warn",
         "h1-multiple",
-        `Found ${h1s.length} <h1> elements; recommended exactly one.`
-      )
+        `Found ${h1s.length} <h1> elements; recommended exactly one.`,
+      ),
     );
   }
 
@@ -258,13 +291,16 @@ function runSeoChecks(url, html) {
         url,
         "warn",
         "heading-hierarchy",
-        `Heading level jumps detected (e.g., h${jumps[0].prev} → h${jumps[0].curr}).`
-      )
+        `Heading level jumps detected (e.g., h${jumps[0].prev} → h${jumps[0].curr}).`,
+      ),
     );
   }
 
   const imagesMissingAlt = $("img").filter((_, el) => {
-    const hasAltAttr = Object.prototype.hasOwnProperty.call(el.attribs || {}, "alt");
+    const hasAltAttr = Object.prototype.hasOwnProperty.call(
+      el.attribs || {},
+      "alt",
+    );
     return !hasAltAttr;
   }).length;
 
@@ -274,13 +310,15 @@ function runSeoChecks(url, html) {
         url,
         "error",
         "img-alt-missing",
-        `${imagesMissingAlt} <img> elements are missing an alt attribute.`
-      )
+        `${imagesMissingAlt} <img> elements are missing an alt attribute.`,
+      ),
     );
   }
 
   const isMarketingPage =
-    pagePath === "/" || pagePath.startsWith("/services") || pagePath.startsWith("/pricing");
+    pagePath === "/" ||
+    pagePath.startsWith("/services") ||
+    pagePath.startsWith("/pricing");
 
   if (isMarketingPage) {
     const ogTitle = $('meta[property="og:title"]').attr("content");
@@ -288,15 +326,34 @@ function runSeoChecks(url, html) {
     const ogImage = $('meta[property="og:image"]').attr("content");
 
     if (!ogTitle) {
-      issues.push(makeIssue(url, "warn", "og-title-missing", "Open Graph og:title is missing."));
+      issues.push(
+        makeIssue(
+          url,
+          "warn",
+          "og-title-missing",
+          "Open Graph og:title is missing.",
+        ),
+      );
     }
     if (!ogDesc) {
       issues.push(
-        makeIssue(url, "warn", "og-description-missing", "Open Graph og:description is missing.")
+        makeIssue(
+          url,
+          "warn",
+          "og-description-missing",
+          "Open Graph og:description is missing.",
+        ),
       );
     }
     if (!ogImage) {
-      issues.push(makeIssue(url, "warn", "og-image-missing", "Open Graph og:image is missing."));
+      issues.push(
+        makeIssue(
+          url,
+          "warn",
+          "og-image-missing",
+          "Open Graph og:image is missing.",
+        ),
+      );
     }
   }
 
@@ -307,15 +364,20 @@ function runSeoChecks(url, html) {
         url,
         "warn",
         "jsonld-missing",
-        "No JSON-LD structured data found on this key marketing page."
-      )
+        "No JSON-LD structured data found on this key marketing page.",
+      ),
     );
   }
 
   const robotsMeta = $('meta[name="robots"]').attr("content") || "";
   if (robotsMeta.toLowerCase().includes("noindex")) {
     issues.push(
-      makeIssue(url, "error", "noindex-meta", "Page is marked as noindex via meta robots.")
+      makeIssue(
+        url,
+        "error",
+        "noindex-meta",
+        "Page is marked as noindex via meta robots.",
+      ),
     );
   }
 
@@ -329,7 +391,12 @@ async function checkSiteWide() {
     const robotsRes = await fetch(`${BASE_URL}/robots.txt`);
     if (!robotsRes.ok) {
       siteWideIssues.push(
-        makeIssue(BASE_URL, "warn", "robots-missing", "robots.txt not found or not accessible.")
+        makeIssue(
+          BASE_URL,
+          "warn",
+          "robots-missing",
+          "robots.txt not found or not accessible.",
+        ),
       );
     } else {
       const text = await robotsRes.text();
@@ -339,14 +406,19 @@ async function checkSiteWide() {
             BASE_URL,
             "error",
             "robots-disallow-all",
-            "robots.txt appears to disallow all crawling."
-          )
+            "robots.txt appears to disallow all crawling.",
+          ),
         );
       }
     }
   } catch {
     siteWideIssues.push(
-      makeIssue(BASE_URL, "warn", "robots-error", "Error while fetching robots.txt.")
+      makeIssue(
+        BASE_URL,
+        "warn",
+        "robots-error",
+        "Error while fetching robots.txt.",
+      ),
     );
   }
 
@@ -354,12 +426,22 @@ async function checkSiteWide() {
     const sitemapRes = await fetch(`${BASE_URL}/sitemap-index.xml`);
     if (!sitemapRes.ok) {
       siteWideIssues.push(
-        makeIssue(BASE_URL, "warn", "sitemap-missing", "sitemap-index.xml not found or not accessible.")
+        makeIssue(
+          BASE_URL,
+          "warn",
+          "sitemap-missing",
+          "sitemap-index.xml not found or not accessible.",
+        ),
       );
     }
   } catch {
     siteWideIssues.push(
-      makeIssue(BASE_URL, "warn", "sitemap-error", "Error while fetching sitemap-index.xml.")
+      makeIssue(
+        BASE_URL,
+        "warn",
+        "sitemap-error",
+        "Error while fetching sitemap-index.xml.",
+      ),
     );
   }
 
@@ -383,7 +465,10 @@ function escapeHtml(str) {
 function writeMarkdownReport(urls, issuesByPage, reportDir) {
   const lines = ["# SEO audit report", ""];
   lines.push(`Tested pages: ${urls.length}`);
-  const totalIssues = Array.from(issuesByPage.values()).reduce((acc, list) => acc + list.length, 0);
+  const totalIssues = Array.from(issuesByPage.values()).reduce(
+    (acc, list) => acc + list.length,
+    0,
+  );
   lines.push(`Total issues: ${totalIssues}`);
   lines.push("");
 
@@ -397,7 +482,7 @@ function writeMarkdownReport(urls, issuesByPage, reportDir) {
     }
     for (const issue of pageIssues) {
       lines.push(
-        `- ${issue.severity === "error" ? "❌" : "⚠️"} **${issue.code}** – ${issue.message}`
+        `- ${issue.severity === "error" ? "❌" : "⚠️"} **${issue.code}** – ${issue.message}`,
       );
     }
     lines.push("");
@@ -419,7 +504,7 @@ function writeHtmlReport(issuesByPage, reportDir) {
                 <div class="code">${escapeHtml(issue.code)}</div>
                 <div>${escapeHtml(issue.message)}</div>
                 <div class="meta">${escapeHtml(issue.severity)}</div>
-              </li>`
+              </li>`,
             )
             .join("")
         : '<li class="ok">No issues 🎉</li>';
@@ -430,7 +515,7 @@ function writeHtmlReport(issuesByPage, reportDir) {
           if (issue.severity === "warn") acc.warnings += 1;
           return acc;
         },
-        { errors: 0, warnings: 0 }
+        { errors: 0, warnings: 0 },
       );
 
       return `
@@ -513,14 +598,24 @@ async function main() {
       res = await fetch(url);
     } catch (err) {
       allIssues.push(
-        makeIssue(url, "error", "page-fetch-error", `Failed to fetch page: ${err.message}`)
+        makeIssue(
+          url,
+          "error",
+          "page-fetch-error",
+          `Failed to fetch page: ${err.message}`,
+        ),
       );
       continue;
     }
 
     if (!res.ok) {
       allIssues.push(
-        makeIssue(url, "error", "page-http-error", `Page responded with HTTP ${res.status}.`)
+        makeIssue(
+          url,
+          "error",
+          "page-http-error",
+          `Page responded with HTTP ${res.status}.`,
+        ),
       );
       continue;
     }
@@ -541,8 +636,8 @@ async function main() {
           target,
           "error",
           "broken-internal-link",
-          `Internal link target returned HTTP ${status}. Linked from: ${fromPages.join(", ")}`
-        )
+          `Internal link target returned HTTP ${status}. Linked from: ${fromPages.join(", ")}`,
+        ),
       );
     }
   }
@@ -566,7 +661,7 @@ async function main() {
   const stats = {
     pagesTested: urls.length,
     errorCount: allIssues.filter((i) => i.severity === "error").length,
-    warningCount: allIssues.filter((i) => i.severity === "warn").length
+    warningCount: allIssues.filter((i) => i.severity === "warn").length,
   };
   const statsPath = path.join(REPORT_DIR, "stats.json");
   fs.writeFileSync(statsPath, JSON.stringify(stats, null, 2), "utf8");
@@ -579,7 +674,9 @@ async function main() {
 
   const errorCount = allIssues.filter((i) => i.severity === "error").length;
   if (errorCount > 0) {
-    console.error(`\n🚫 SEO audit failed: ${errorCount} error-level issues found.`);
+    console.error(
+      `\n🚫 SEO audit failed: ${errorCount} error-level issues found.`,
+    );
     process.exit(1);
   }
 

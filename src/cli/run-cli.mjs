@@ -15,18 +15,20 @@ const COMMANDS = {
     seo: "scripts/seo-audit.mjs",
     links: "scripts/link-check.mjs",
     jsonld: "scripts/jsonld-validate.mjs",
-    comment: "scripts/post-quality-comment.mjs"
+    comment: "scripts/post-quality-comment.mjs",
   },
   update: {
     components: "scripts/update-components.mjs",
-    toolkit: "scripts/update-toolkit.mjs"
-  }
+    toolkit: "scripts/update-toolkit.mjs",
+  },
 };
 
 function printHelp() {
   console.log("Usage:");
   console.log("  yws-toolkit clean [-- <args>]");
-  console.log("  yws-toolkit quality <run|a11y|seo|links|jsonld|comment> [-- <args>]");
+  console.log(
+    "  yws-toolkit quality <run|a11y|seo|links|jsonld|comment> [-- <args>]",
+  );
   console.log("  yws-toolkit update <components|toolkit> [-- <args>]");
 }
 
@@ -43,7 +45,7 @@ function runScript(scriptRelPath, args) {
   if (!fs.existsSync(scriptPath)) {
     console.error(
       `Script not available yet in toolkit: ${scriptRelPath}. ` +
-        "This command will work once that script is migrated."
+        "This command will work once that script is migrated.",
     );
     return 1;
   }
@@ -51,7 +53,7 @@ function runScript(scriptRelPath, args) {
   const result = spawnSync(process.execPath, [scriptPath, ...args], {
     stdio: "inherit",
     cwd: process.cwd(),
-    env: process.env
+    env: process.env,
   });
 
   return result.status ?? 1;
@@ -66,20 +68,29 @@ export function runCli(argv = []) {
   }
 
   if (mainCommand === "clean") {
-    const exitCode = runScript(resolveScript("clean"), [maybeSubCommand, ...rest].filter(Boolean));
+    const exitCode = runScript(
+      resolveScript("clean"),
+      [maybeSubCommand, ...rest].filter(Boolean),
+    );
     if (exitCode !== 0) process.exit(exitCode);
     return;
   }
 
   if (mainCommand === "quality" || mainCommand === "update") {
-    if (!maybeSubCommand || maybeSubCommand === "-h" || maybeSubCommand === "--help") {
+    if (
+      !maybeSubCommand ||
+      maybeSubCommand === "-h" ||
+      maybeSubCommand === "--help"
+    ) {
       printHelp();
       process.exit(1);
       return;
     }
     const scriptRelPath = resolveScript(mainCommand, maybeSubCommand);
     if (!scriptRelPath) {
-      console.error(`Unknown subcommand for "${mainCommand}": ${maybeSubCommand}`);
+      console.error(
+        `Unknown subcommand for "${mainCommand}": ${maybeSubCommand}`,
+      );
       printHelp();
       process.exit(1);
       return;

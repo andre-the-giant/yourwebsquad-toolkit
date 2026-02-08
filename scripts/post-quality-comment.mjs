@@ -54,7 +54,8 @@ let body = "## 🔍 Automated quality summary\n\n";
 // Lighthouse section
 body += "### Lighthouse (LHCI)\n";
 if (!lhManifest.length) {
-  body += "- No Lighthouse data found. Did LHCI run and write `lhci-report/manifest.json`?\n\n";
+  body +=
+    "- No Lighthouse data found. Did LHCI run and write `lhci-report/manifest.json`?\n\n";
 } else {
   const urlsTested = new Set(lhManifest.map((r) => r.url));
   body += `- Pages tested: **${urlsTested.size}**\n`;
@@ -106,7 +107,7 @@ if (!seoIssues.length) {
     .map(([url, issues]) => ({
       url,
       errors: issues.filter((i) => i.severity === "error").length,
-      warns: issues.filter((i) => i.severity === "warn").length
+      warns: issues.filter((i) => i.severity === "warn").length,
     }))
     .sort((a, b) => b.errors - a.errors || b.warns - a.warns)
     .slice(0, 3);
@@ -120,7 +121,8 @@ if (!seoIssues.length) {
   }
 }
 
-body += "_Full details are available in the workflow artifacts (Lighthouse, Pa11y, SEO reports)._";
+body +=
+  "_Full details are available in the workflow artifacts (Lighthouse, Pa11y, SEO reports)._";
 
 const { GITHUB_REPOSITORY, GITHUB_EVENT_PATH, GITHUB_TOKEN } = process.env;
 
@@ -131,7 +133,7 @@ if (!GITHUB_TOKEN) {
 
 if (!GITHUB_REPOSITORY || !GITHUB_EVENT_PATH) {
   console.error(
-    "Missing GITHUB_REPOSITORY or GITHUB_EVENT_PATH; are we running in GitHub Actions?"
+    "Missing GITHUB_REPOSITORY or GITHUB_EVENT_PATH; are we running in GitHub Actions?",
   );
   process.exit(0);
 }
@@ -141,7 +143,7 @@ const prNumber = event.pull_request && event.pull_request.number;
 
 if (!prNumber) {
   console.error(
-    "No pull_request number found in event payload. This script should run on pull_request events."
+    "No pull_request number found in event payload. This script should run on pull_request events.",
   );
   process.exit(0);
 }
@@ -153,7 +155,7 @@ const apiUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}
 const headers = {
   Authorization: `Bearer ${GITHUB_TOKEN}`,
   Accept: "application/vnd.github+json",
-  "Content-Type": "application/json"
+  "Content-Type": "application/json",
 };
 
 console.log(`💬 Posting quality summary comment to PR #${prNumber}...`);
@@ -161,7 +163,7 @@ console.log(`💬 Posting quality summary comment to PR #${prNumber}...`);
 const res = await fetch(apiUrl, {
   method: "POST",
   headers,
-  body: JSON.stringify({ body })
+  body: JSON.stringify({ body }),
 });
 
 if (!res.ok) {

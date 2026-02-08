@@ -6,10 +6,17 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { structuredDataTestHtml } = require("structured-data-testing-tool");
-const { Google, Twitter, Facebook } = require("structured-data-testing-tool/presets");
+const {
+  Google,
+  Twitter,
+  Facebook,
+} = require("structured-data-testing-tool/presets");
 
 const args = process.argv.slice(2);
-const targetDir = path.resolve(process.cwd(), args.find((arg) => !arg.startsWith("--")) || "build");
+const targetDir = path.resolve(
+  process.cwd(),
+  args.find((arg) => !arg.startsWith("--")) || "build",
+);
 const urlsFile =
   args.find((arg) => arg.startsWith("--urls-file="))?.split("=")[1] ||
   path.join(process.cwd(), "reports", "urls.json");
@@ -66,8 +73,14 @@ function readHtmlFiles(dir) {
 function formatTest(test) {
   const pathLabel = test.test || test.description || "Unknown test";
   const message =
-    test?.error?.message || test?.message || test?.error || test?.expect || "Validation failed";
-  const groups = Array.isArray(test?.groups) ? test.groups.join(" > ") : test.group || "";
+    test?.error?.message ||
+    test?.message ||
+    test?.error ||
+    test?.expect ||
+    "Validation failed";
+  const groups = Array.isArray(test?.groups)
+    ? test.groups.join(" > ")
+    : test.group || "";
   return `${groups ? `${groups}: ` : ""}${pathLabel} — ${message}`;
 }
 
@@ -78,7 +91,7 @@ async function validateFile(file, issues) {
   try {
     result = await structuredDataTestHtml(html, {
       url: `file://${file}`,
-      presets
+      presets,
     });
   } catch (err) {
     if (err?.type === "VALIDATION_FAILED" && err.res) {
@@ -87,7 +100,7 @@ async function validateFile(file, issues) {
       issues.push({
         file,
         level: "error",
-        message: `Validator crashed: ${err?.message || err}`
+        message: `Validator crashed: ${err?.message || err}`,
       });
       return;
     }
@@ -102,14 +115,14 @@ async function validateFile(file, issues) {
     file,
     level: failed.length ? "error" : "warning",
     errors: failed.map(formatTest),
-    warnings: warnings.map(formatTest)
+    warnings: warnings.map(formatTest),
   });
 }
 
 async function main() {
   if (!fs.existsSync(targetDir)) {
     console.error(
-      `❌ Target directory not found: ${targetDir}. Did you run "npm run build" first?`
+      `❌ Target directory not found: ${targetDir}. Did you run "npm run build" first?`,
     );
     process.exit(1);
   }
@@ -132,12 +145,16 @@ async function main() {
   }
 
   if (issues.length) {
-    const withErrors = issues.filter((i) => i.level === "error" && i.errors?.length);
+    const withErrors = issues.filter(
+      (i) => i.level === "error" && i.errors?.length,
+    );
     const withWarnings = issues.filter((i) => i.warnings?.length);
 
     console.error(
       `❌ JSON-LD validation found ${withErrors.length} page(s) with errors` +
-        (withWarnings.length ? ` and ${withWarnings.length} with warnings.` : ".")
+        (withWarnings.length
+          ? ` and ${withWarnings.length} with warnings.`
+          : "."),
     );
 
     issues.forEach((issue) => {
@@ -159,7 +176,9 @@ async function main() {
       process.exit(1);
     }
   } else {
-    console.log(`✅ JSON-LD validation passed for ${htmlFiles.length} HTML file(s).`);
+    console.log(
+      `✅ JSON-LD validation passed for ${htmlFiles.length} HTML file(s).`,
+    );
   }
 }
 

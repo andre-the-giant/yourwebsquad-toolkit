@@ -10,7 +10,8 @@ import semver from "semver";
 const repoRoot = process.cwd();
 const pkgPath = path.join(repoRoot, "package.json");
 const dependencyName = "yourwebsquad-toolkit";
-const dependencyRepo = "https://github.com/andre-the-giant/yourwebsquad-toolkit.git";
+const dependencyRepo =
+  "https://github.com/andre-the-giant/yourwebsquad-toolkit.git";
 
 const starLine = chalk.gray("★".repeat(50));
 const infoArt = chalk.white(
@@ -50,8 +51,8 @@ const infoArt = chalk.white(
     "████████████████████████████████████▒▓▓▒▒▒▓▓▓▓▓▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒████████████████████████████████████",
     "██████████████████████████████████████▒▒▒▒▒▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒████████████████████████████████████",
     "███████████████████████████████████████▓▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▓▓▓▓▓▓▓▓▓▓███████████████████████████████████",
-    "████████████████████████████████████████▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▓▓▓▓▓▓▓▓▓▓███████████████████████████████████"
-  ].join("\n")
+    "████████████████████████████████████████▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▓▓▓▓▓▓▓▓▓▓███████████████████████████████████",
+  ].join("\n"),
 );
 
 const successArt = chalk.green(
@@ -94,8 +95,8 @@ const successArt = chalk.green(
     "▒██████  ██████████ █████████      █████        ██░███████ ████████ ████████▒ ",
     "█  ██   ░█░██████████████ █████     ██████       ██████████████████████   ▓█  █",
     "█      █▒  ███████▓██████▒█████     ██████▒      ████████████ ██████   ▓      █",
-    "█      ██ ███ ████▓█████████████    ███████     █████████████ ███ ██▒ ██░     ▒"
-  ].join("\n")
+    "█      ██ ███ ████▓█████████████    ███████     █████████████ ███ ██▒ ██░     ▒",
+  ].join("\n"),
 );
 
 const errorArt = chalk.red(["  !!!   Oh no!", " (x x)", "  \\_/ "].join("\n"));
@@ -129,14 +130,20 @@ async function getCurrentTag(pkg) {
   }
   const hashIndex = dep.lastIndexOf("#");
   if (hashIndex === -1 || hashIndex === dep.length - 1) {
-    throw new Error(`Dependency ${dependencyName} does not include a tag (expected '#vX.Y.Z').`);
+    throw new Error(
+      `Dependency ${dependencyName} does not include a tag (expected '#vX.Y.Z').`,
+    );
   }
   return dep.slice(hashIndex + 1);
 }
 
 async function fetchTags() {
   try {
-    const { stdout } = await execa("git", ["ls-remote", "--tags", dependencyRepo]);
+    const { stdout } = await execa("git", [
+      "ls-remote",
+      "--tags",
+      dependencyRepo,
+    ]);
     const tags = stdout
       .split("\n")
       .map((line) => line.trim())
@@ -170,8 +177,8 @@ async function selectTag(currentTag, allTags) {
       type: "list",
       name: "targetTag",
       message: `Current ${dependencyName} tag is ${currentTag}. Choose target:`,
-      choices: allTags.map((tag) => ({ name: tag, value: tag }))
-    }
+      choices: allTags.map((tag) => ({ name: tag, value: tag })),
+    },
   ]);
 
   return targetTag;
@@ -207,7 +214,9 @@ async function main() {
     logInfo(`Updating ${dependencyName} to ${targetTag} in package.json...`);
     await updateDependency(pkg, targetTag);
 
-    logInfo("Cleaning workspace (removing lockfile, build artifacts, node_modules)...");
+    logInfo(
+      "Cleaning workspace (removing lockfile, build artifacts, node_modules)...",
+    );
     await execa("npm", ["run", "clean"], { stdio: "inherit" });
 
     logInfo("Reinstalling dependencies...");

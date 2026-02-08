@@ -8,7 +8,7 @@ const targets = [
   "reports",
   ".astro",
   "node_modules",
-  "package-lock.json"
+  "package-lock.json",
 ];
 
 for (const target of targets) {

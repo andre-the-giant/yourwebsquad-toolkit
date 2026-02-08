@@ -73,11 +73,18 @@ async function crawl(startUrl) {
     $("a[href]").each((_, el) => {
       let href = $(el).attr("href");
       if (!href) return;
-      if (href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("#")) return;
+      if (
+        href.startsWith("mailto:") ||
+        href.startsWith("tel:") ||
+        href.startsWith("#")
+      )
+        return;
 
       let absolute;
       try {
-        absolute = href.startsWith("http") ? href : new URL(href, url).toString();
+        absolute = href.startsWith("http")
+          ? href
+          : new URL(href, url).toString();
       } catch {
         return;
       }
@@ -141,8 +148,10 @@ function writeMarkdownSummary(pages, reportDir) {
       lines.push(
         `- ${issue.type === "error" ? "❌" : "⚠️"} **${issue.code}** at \`${issue.selector}\``,
         `  - Message: ${issue.message}`,
-        issue.context ? `  - Context: \`${String(issue.context).slice(0, 120)}\`` : "",
-        ""
+        issue.context
+          ? `  - Context: \`${String(issue.context).slice(0, 120)}\``
+          : "",
+        "",
       );
     }
   }
@@ -164,7 +173,7 @@ function writeHtmlReport(pages, totals, reportDir) {
                 <div>${escapeHtml(issue.message)}</div>
                 <div class="meta"><span>${issue.type}</span> <code>${escapeHtml(issue.selector || "")}</code></div>
                 ${issue.context ? `<pre>${escapeHtml(String(issue.context).slice(0, 500))}</pre>` : ""}
-              </li>`
+              </li>`,
             )
             .join("")
         : '<li class="ok">No issues 🎉</li>';
@@ -175,7 +184,7 @@ function writeHtmlReport(pages, totals, reportDir) {
           if (issue.type === "warning") acc.warnings += 1;
           return acc;
         },
-        { errors: 0, warnings: 0 }
+        { errors: 0, warnings: 0 },
       );
 
       return `
@@ -258,15 +267,19 @@ async function main() {
         standard: "WCAG2AA",
         timeout: 30000,
         chromeLaunchConfig: {
-          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
-        }
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+          ],
+        },
       });
     } catch (err) {
       console.error(`  ❌ Pa11y crashed on ${url}: ${err.message}`);
       totalErrors += 1;
       pageResults.push({
         url,
-        issues: [{ type: "error", code: "pa11y-crash", message: err.message }]
+        issues: [{ type: "error", code: "pa11y-crash", message: err.message }],
       });
       continue;
     }
@@ -284,14 +297,14 @@ async function main() {
   const htmlPath = writeHtmlReport(
     pageResults,
     { errors: totalErrors, warnings: totalWarnings },
-    REPORT_DIR
+    REPORT_DIR,
   );
 
   // write stats for the orchestrator/PR comment
   const stats = {
     pagesTested: pageResults.length,
     errorCount: totalErrors,
-    warningCount: totalWarnings
+    warningCount: totalWarnings,
   };
   const statsPath = path.join(REPORT_DIR, "stats.json");
   fs.writeFileSync(statsPath, JSON.stringify(stats, null, 2), "utf8");
@@ -300,7 +313,7 @@ async function main() {
   console.log(`📄 Pa11y report (html): ${htmlPath}`);
   console.log(`📄 Pa11y stats (json): ${statsPath}`);
   console.log(
-    `Totals: ${totalErrors} errors, ${totalWarnings} warnings across ${pageResults.length} pages.`
+    `Totals: ${totalErrors} errors, ${totalWarnings} warnings across ${pageResults.length} pages.`,
   );
 
   if (totalErrors > 0) {

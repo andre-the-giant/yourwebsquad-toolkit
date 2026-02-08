@@ -7,14 +7,17 @@ import waitOn from "wait-on";
 import { load as loadHtml } from "cheerio";
 
 const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
-const DEFAULT_REPORT_DIR = process.env.LINK_REPORT_DIR || path.join(process.cwd(), "reports/links");
+const DEFAULT_REPORT_DIR =
+  process.env.LINK_REPORT_DIR || path.join(process.cwd(), "reports/links");
 const DEFAULT_SITE_PORT = Number(process.env.SITE_PORT || 4321);
 
 const args = parseArgs(process.argv.slice(2));
 const BASE_URL = args.base ?? DEFAULT_BASE_URL;
 const REPORT_DIR = args.reportDir ?? DEFAULT_REPORT_DIR;
 const URLS_FILE = args.urlsFile;
-const CHECK_EXTERNAL = args.skipExternal ? false : process.env.CHECK_EXTERNAL_LINKS !== "0";
+const CHECK_EXTERNAL = args.skipExternal
+  ? false
+  : process.env.CHECK_EXTERNAL_LINKS !== "0";
 const QUIET_MODE = Boolean(args.quiet || process.env.LINKS_QUIET === "1");
 
 const visited = new Set();
@@ -65,7 +68,9 @@ function runCommand(cmd, args, { label = cmd } = {}) {
 
 function startStaticServer(dir, port, { quiet = QUIET_MODE } = {}) {
   const args = ["serve", dir, "-l", String(port)];
-  const opts = quiet ? { stdio: "ignore", shell: true } : { stdio: "inherit", shell: true };
+  const opts = quiet
+    ? { stdio: "ignore", shell: true }
+    : { stdio: "inherit", shell: true };
   const child = spawn("npx", args, opts);
   child.on("exit", (code) => {
     if (code !== null && code !== 0 && !quiet) {
@@ -86,7 +91,8 @@ async function ensureBuildExists() {
   const buildDir = path.join(process.cwd(), "build");
   const hasBuild = fs.existsSync(buildDir);
   if (hasBuild) return;
-  if (!QUIET_MODE) console.log("🏗️  No build found, running npm run build for link check...");
+  if (!QUIET_MODE)
+    console.log("🏗️  No build found, running npm run build for link check...");
   await runCommand("npm", ["run", "build"], { label: "npm run build" });
 }
 
@@ -122,7 +128,7 @@ function fileExistsForPath(pathname) {
 function getUrlsFromSitemap(baseUrl) {
   const candidates = [
     path.join(process.cwd(), "build", "sitemap-0.xml"),
-    path.join(process.cwd(), "build", "sitemap.xml")
+    path.join(process.cwd(), "build", "sitemap.xml"),
   ];
   const sitemapPath = candidates.find(fs.existsSync);
   if (!sitemapPath) return [];
@@ -192,7 +198,11 @@ async function fetchWithTimeout(url, method) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
-    return await fetch(url, { method, redirect: "follow", signal: controller.signal });
+    return await fetch(url, {
+      method,
+      redirect: "follow",
+      signal: controller.signal,
+    });
   } finally {
     clearTimeout(timer);
   }
@@ -203,7 +213,13 @@ async function checkLink(url, isExternal) {
   if (linkCache.has(normalized)) return linkCache.get(normalized);
 
   if (isExternal && !CHECK_EXTERNAL) {
-    const skipped = { url: normalized, ok: true, skipped: true, isExternal, status: 0 };
+    const skipped = {
+      url: normalized,
+      ok: true,
+      skipped: true,
+      isExternal,
+      status: 0,
+    };
     linkCache.set(normalized, skipped);
     return skipped;
   }
@@ -227,13 +243,19 @@ async function checkLink(url, isExternal) {
       ok: false,
       status: 0,
       error: error?.message || "Request failed",
-      isExternal
+      isExternal,
     };
     linkCache.set(normalized, result);
     return result;
   }
 
-  const result = { url: normalized, ok: res.ok, status: res.status, isExternal, finalUrl: res.url };
+  const result = {
+    url: normalized,
+    ok: res.ok,
+    status: res.status,
+    isExternal,
+    finalUrl: res.url,
+  };
   linkCache.set(normalized, result);
   return result;
 }
@@ -261,11 +283,18 @@ async function crawl() {
     $("a[href]").each((_, el) => {
       let href = $(el).attr("href");
       if (!href) return;
-      if (href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("#")) return;
+      if (
+        href.startsWith("mailto:") ||
+        href.startsWith("tel:") ||
+        href.startsWith("#")
+      )
+        return;
 
       let absolute;
       try {
-        absolute = href.startsWith("http") ? href : new URL(href, url).toString();
+        absolute = href.startsWith("http")
+          ? href
+          : new URL(href, url).toString();
       } catch {
         return;
       }
@@ -312,7 +341,7 @@ function buildSelector($, el) {
     }
     const siblings =
       current.parent?.children?.filter(
-        (child) => child.type === "tag" && child.name === current.name
+        (child) => child.type === "tag" && child.name === current.name,
       ) || [];
     if (siblings.length > 1) {
       const index = siblings.indexOf(current);
@@ -330,7 +359,7 @@ function writeMarkdown(pages, broken, skippedExternal, reportDir) {
   lines.push(`Broken links: ${broken.length}`);
   if (skippedExternal > 0) {
     lines.push(
-      `External links skipped (set CHECK_EXTERNAL_LINKS=1 to include): ${skippedExternal}`
+      `External links skipped (set CHECK_EXTERNAL_LINKS=1 to include): ${skippedExternal}`,
     );
   }
   lines.push("");
@@ -340,7 +369,7 @@ function writeMarkdown(pages, broken, skippedExternal, reportDir) {
   } else {
     for (const issue of broken) {
       lines.push(
-        `- ${issue.pageUrl} → ${issue.linkUrl} (status: ${issue.status || "failed"}${issue.isExternal ? ", external" : ""})`
+        `- ${issue.pageUrl} → ${issue.linkUrl} (status: ${issue.status || "failed"}${issue.isExternal ? ", external" : ""})`,
       );
       if (issue.selector) lines.push(`  - Selector: \`${issue.selector}\``);
       if (issue.text) lines.push(`  - Text: ${issue.text}`);
@@ -353,7 +382,13 @@ function writeMarkdown(pages, broken, skippedExternal, reportDir) {
   return summaryPath;
 }
 
-function writeHtml(pages, broken, skippedExternal, reportDir, { brokenOnly = false } = {}) {
+function writeHtml(
+  pages,
+  broken,
+  skippedExternal,
+  reportDir,
+  { brokenOnly = false } = {},
+) {
   const filteredPages = brokenOnly
     ? pages
         .map((page) => {
@@ -379,7 +414,9 @@ function writeHtml(pages, broken, skippedExternal, reportDir, { brokenOnly = fal
               const selector = link.selector
                 ? `<div class="selector">${escapeHtml(link.selector)}</div>`
                 : "";
-              const text = link.text ? `<div class="selector">${escapeHtml(link.text)}</div>` : "";
+              const text = link.text
+                ? `<div class="selector">${escapeHtml(link.text)}</div>`
+                : "";
               return `<li class="${cls}">
                 <div class="url">${escapeHtml(link.linkUrl)}</div>
                 <div class="meta">${escapeHtml(statusText)}</div>
@@ -441,7 +478,9 @@ async function main() {
   ensureReportDirClean(REPORT_DIR);
 
   if (!CHECK_EXTERNAL && !QUIET_MODE) {
-    console.log("ℹ️  External links will be skipped (set CHECK_EXTERNAL_LINKS=1 to include).");
+    console.log(
+      "ℹ️  External links will be skipped (set CHECK_EXTERNAL_LINKS=1 to include).",
+    );
   }
 
   let server = null;
@@ -449,20 +488,24 @@ async function main() {
     try {
       server = await ensureSiteServer();
     } catch (err) {
-      console.error(`❌ Unable to start or reach site server at ${BASE_URL}: ${err.message}`);
+      console.error(
+        `❌ Unable to start or reach site server at ${BASE_URL}: ${err.message}`,
+      );
       throw err;
     }
 
     let pages = [];
     if (URLS_FILE) {
-      if (!QUIET_MODE) console.log(`🔍 Loading URLs from ${URLS_FILE} for link check...`);
+      if (!QUIET_MODE)
+        console.log(`🔍 Loading URLs from ${URLS_FILE} for link check...`);
       pages = loadUrlsFromFile(URLS_FILE, BASE_URL);
     }
     if (!pages.length) {
       pages = getUrlsFromSitemap(BASE_URL);
     }
     if (!pages.length) {
-      if (!QUIET_MODE) console.log(`🔍 Crawling site for link check at ${BASE_URL}...`);
+      if (!QUIET_MODE)
+        console.log(`🔍 Crawling site for link check at ${BASE_URL}...`);
       pages = await crawl();
     }
     if (!QUIET_MODE) {
@@ -481,7 +524,15 @@ async function main() {
         console.error(`❌ Failed to fetch ${pageUrl}: ${err.message}`);
         pageResults.push({
           url: pageUrl,
-          links: [{ linkUrl: pageUrl, ok: false, status: 0, error: err.message, isExternal: false }]
+          links: [
+            {
+              linkUrl: pageUrl,
+              ok: false,
+              status: 0,
+              error: err.message,
+              isExternal: false,
+            },
+          ],
         });
         continue;
       }
@@ -493,11 +544,18 @@ async function main() {
       $("a[href]").each((_, el) => {
         let href = $(el).attr("href");
         if (!href) return;
-        if (href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("#")) return;
+        if (
+          href.startsWith("mailto:") ||
+          href.startsWith("tel:") ||
+          href.startsWith("#")
+        )
+          return;
 
         let absolute;
         try {
-          absolute = href.startsWith("http") ? href : new URL(href, pageUrl).toString();
+          absolute = href.startsWith("http")
+            ? href
+            : new URL(href, pageUrl).toString();
         } catch {
           return;
         }
@@ -506,7 +564,12 @@ async function main() {
         const isExternal = !isInternal(normalized);
         const selector = buildSelector($, el);
         const text = ($(el).text() || "").trim().slice(0, 120);
-        links.push({ linkUrl: normalized, isExternal, selector, text: text || undefined });
+        links.push({
+          linkUrl: normalized,
+          isExternal,
+          selector,
+          text: text || undefined,
+        });
       });
 
       const uniqueUrls = Array.from(new Set(links.map((l) => l.linkUrl)));
@@ -537,21 +600,32 @@ async function main() {
           error: l.error,
           isExternal: l.isExternal,
           selector: l.selector,
-          text: l.text
-        }))
+          text: l.text,
+        })),
     );
 
     ensureDir(REPORT_DIR);
 
-    const summaryPath = writeMarkdown(pageResults, broken, skippedExternal, REPORT_DIR);
-    const htmlPath = writeHtml(pageResults, broken, skippedExternal, REPORT_DIR, {
-      brokenOnly: QUIET_MODE
-    });
+    const summaryPath = writeMarkdown(
+      pageResults,
+      broken,
+      skippedExternal,
+      REPORT_DIR,
+    );
+    const htmlPath = writeHtml(
+      pageResults,
+      broken,
+      skippedExternal,
+      REPORT_DIR,
+      {
+        brokenOnly: QUIET_MODE,
+      },
+    );
     const jsonPath = path.join(REPORT_DIR, "links.json");
     fs.writeFileSync(
       jsonPath,
       JSON.stringify({ pages: pageResults, broken, skippedExternal }, null, 2),
-      "utf8"
+      "utf8",
     );
 
     if (QUIET_MODE) {
@@ -560,9 +634,13 @@ async function main() {
       } else {
         console.log(`\n🚫 Broken links (${broken.length}):`);
         broken.forEach((issue) => {
-          const statusText = issue.status ? `status ${issue.status}` : issue.error || "failed";
+          const statusText = issue.status
+            ? `status ${issue.status}`
+            : issue.error || "failed";
           const scope = issue.isExternal ? "external" : "internal";
-          console.log(`- ${issue.pageUrl} → ${issue.linkUrl} (${statusText}, ${scope})`);
+          console.log(
+            `- ${issue.pageUrl} → ${issue.linkUrl} (${statusText}, ${scope})`,
+          );
         });
         console.log(`Details saved to ${summaryPath}`);
       }
@@ -574,7 +652,9 @@ async function main() {
 
     if (broken.length > 0) {
       if (!QUIET_MODE) {
-        console.error(`\n🚫 Link check failed: ${broken.length} broken links found.`);
+        console.error(
+          `\n🚫 Link check failed: ${broken.length} broken links found.`,
+        );
       }
       process.exitCode = 1;
     } else {

@@ -34,16 +34,24 @@ const toolkitScriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const toolkitScriptPath = (filename) => path.join(toolkitScriptsDir, filename);
 const argv = process.argv.slice(2);
 const fullFlag = argv.includes("--full") || npmArgvIncludes("--full");
-const noQuietFlag = argv.includes("--no-quiet") || npmArgvIncludes("--no-quiet");
+const noQuietFlag =
+  argv.includes("--no-quiet") || npmArgvIncludes("--no-quiet");
 const WANT_FULL_OUTPUT =
-  fullFlag || isTruthy(process.env.FULL_OUTPUT) || isTruthy(process.env.npm_config_full);
-const QUIET_MODE = WANT_FULL_OUTPUT ? false : !noQuietFlag && !isFalsey(process.env.QUIET);
+  fullFlag ||
+  isTruthy(process.env.FULL_OUTPUT) ||
+  isTruthy(process.env.npm_config_full);
+const QUIET_MODE = WANT_FULL_OUTPUT
+  ? false
+  : !noQuietFlag && !isFalsey(process.env.QUIET);
 const LOG_ROOT = path.join(REPORT_ROOT, "logs");
 
 function openInBrowser(url) {
   try {
     if (process.platform === "win32") {
-      const child = spawn("cmd", ["/c", "start", '""', url], { stdio: "ignore", detached: true });
+      const child = spawn("cmd", ["/c", "start", '""', url], {
+        stdio: "ignore",
+        detached: true,
+      });
       child.unref();
       return true;
     }
@@ -61,12 +69,15 @@ function openInBrowser(url) {
 }
 
 const TEST_CHOICES = [
-  { name: "All (Lighthouse + Pa11y + SEO + Link check + JSON-LD)", value: "all" },
+  {
+    name: "All (Lighthouse + Pa11y + SEO + Link check + JSON-LD)",
+    value: "all",
+  },
   { name: "Lighthouse", value: "lighthouse" },
   { name: "Accessibility (Pa11y)", value: "pa11y" },
   { name: "SEO audit", value: "seo" },
   { name: "Link check", value: "links" },
-  { name: "JSON-LD validation", value: "jsonld" }
+  { name: "JSON-LD validation", value: "jsonld" },
 ];
 
 function choiceToFlags(choice) {
@@ -77,7 +88,7 @@ function choiceToFlags(choice) {
       pa11y: true,
       seo: true,
       links: true,
-      jsonld: true
+      jsonld: true,
     };
   }
   const name = TEST_CHOICES.find((c) => c.value === choice)?.name || choice;
@@ -87,7 +98,7 @@ function choiceToFlags(choice) {
     pa11y: choice === "pa11y",
     seo: choice === "seo",
     links: choice === "links",
-    jsonld: choice === "jsonld"
+    jsonld: choice === "jsonld",
   };
 }
 
@@ -98,8 +109,8 @@ async function promptForChecks() {
       name: "choice",
       message: "Which test do you want to perform?",
       choices: TEST_CHOICES,
-      default: "all"
-    }
+      default: "all",
+    },
   ]);
   return choiceToFlags(choice);
 }
@@ -172,13 +183,16 @@ async function runCommand(cmd, args, options = {}) {
   const spawnOptions = {
     shell: true,
     ...spawnOverrides,
-    env: { ...process.env, ...customEnv }
+    env: { ...process.env, ...customEnv },
   };
 
   const shouldLogToFile = quiet || forceLog || Boolean(onLine);
   const logFile =
     logName && shouldLogToFile
-      ? path.join(LOG_ROOT, `${logName || slugify(commandLabel) || "command"}.log`)
+      ? path.join(
+          LOG_ROOT,
+          `${logName || slugify(commandLabel) || "command"}.log`,
+        )
       : null;
   if (logFile) {
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
@@ -189,7 +203,8 @@ async function runCommand(cmd, args, options = {}) {
     return new Promise((resolve, reject) => {
       const child = spawn(cmd, args, spawnOptions);
       child.on("exit", (code) => {
-        if (code === 0 || allowFailure) return resolve({ logPath: null, exitCode: code });
+        if (code === 0 || allowFailure)
+          return resolve({ logPath: null, exitCode: code });
         reject(new Error(`${commandLabel} exited with code ${code}`));
       });
     });
@@ -247,7 +262,8 @@ async function runCommand(cmd, args, options = {}) {
       if (outStream) outStream.end();
       if (stdoutBuffer && onLine) flushBuffer(`${stdoutBuffer}\n`, "stdout");
       if (stderrBuffer && onLine) flushBuffer(`${stderrBuffer}\n`, "stderr");
-      if (code === 0 || allowFailure) return resolve({ logPath: logFile, exitCode: code, tail });
+      if (code === 0 || allowFailure)
+        return resolve({ logPath: logFile, exitCode: code, tail });
       const err = new Error(`${commandLabel} exited with code ${code}`);
       err.logPath = logFile;
       err.tail = tail;
@@ -256,13 +272,21 @@ async function runCommand(cmd, args, options = {}) {
   });
 }
 
-function startStaticServer(dir, port, label, { quiet = QUIET_MODE, logName } = {}) {
+function startStaticServer(
+  dir,
+  port,
+  label,
+  { quiet = QUIET_MODE, logName } = {},
+) {
   const serveArgs = ["serve", dir, "-l", String(port)];
   const spawnOpts = { shell: true };
   let logStream;
 
   if (quiet) {
-    const logFile = path.join(LOG_ROOT, `${logName || `${slugify(label)}-server`}.log`);
+    const logFile = path.join(
+      LOG_ROOT,
+      `${logName || `${slugify(label)}-server`}.log`,
+    );
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     logStream = fs.createWriteStream(logFile);
     spawnOpts.stdio = ["ignore", "pipe", "pipe"];
@@ -342,7 +366,10 @@ function slugifyLocation(value) {
 }
 
 function loadLocationSlugs() {
-  const file = path.join(process.cwd(), "public/cms-content/seo/location-specific-content.json");
+  const file = path.join(
+    process.cwd(),
+    "public/cms-content/seo/location-specific-content.json",
+  );
   if (!fs.existsSync(file)) return [];
   try {
     const raw = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -395,7 +422,9 @@ function filterLocationPages(urls) {
   const filtered = urls.filter((u) => keep.has(u));
   const dropped = urls.length - filtered.length;
   if (dropped > 0) {
-    console.log(`ℹ️  Collapsed location pages: kept 1 per locale, dropped ${dropped} duplicates.`);
+    console.log(
+      `ℹ️  Collapsed location pages: kept 1 per locale, dropped ${dropped} duplicates.`,
+    );
   }
   return filtered;
 }
@@ -403,7 +432,9 @@ function filterLocationPages(urls) {
 function getUrlsFromSitemap(baseUrl) {
   const sitemapPath = path.join(process.cwd(), "build", "sitemap-0.xml");
   if (!fs.existsSync(sitemapPath)) {
-    console.warn("⚠️  No sitemap found at build/sitemap.xml; falling back to crawl.");
+    console.warn(
+      "⚠️  No sitemap found at build/sitemap.xml; falling back to crawl.",
+    );
     return [];
   }
 
@@ -455,11 +486,18 @@ async function crawlAllPages(startUrl) {
 
     $("a[href]").each((_, el) => {
       const href = $(el).attr("href");
-      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:"))
+      if (
+        !href ||
+        href.startsWith("#") ||
+        href.startsWith("mailto:") ||
+        href.startsWith("tel:")
+      )
         return;
       let absolute;
       try {
-        absolute = href.startsWith("http") ? href : new URL(href, url).toString();
+        absolute = href.startsWith("http")
+          ? href
+          : new URL(href, url).toString();
       } catch {
         return;
       }
@@ -484,7 +522,7 @@ function writeUrlList(urls) {
 function findHtmlReport(reportDir, baseName) {
   const candidates = [
     path.join(reportDir, `${baseName}.html`),
-    path.join(reportDir, `${baseName}.report.html`)
+    path.join(reportDir, `${baseName}.report.html`),
   ];
   return candidates.find(fs.existsSync);
 }
@@ -505,7 +543,11 @@ function generateLighthouseSummary(reportDir) {
     }
     if (!data.categories) continue;
     const url =
-      data.finalDisplayedUrl || data.finalUrl || data.requestedUrl || data.mainDocumentUrl || file;
+      data.finalDisplayedUrl ||
+      data.finalUrl ||
+      data.requestedUrl ||
+      data.mainDocumentUrl ||
+      file;
     const scores = {};
     for (const [key, cat] of Object.entries(data.categories)) {
       if (cat && typeof cat.score === "number") {
@@ -514,7 +556,11 @@ function generateLighthouseSummary(reportDir) {
     }
     const baseName = path.basename(file, ".json");
     const htmlReport = findHtmlReport(reportDir, baseName);
-    runs.push({ url, scores, htmlReport: htmlReport ? path.basename(htmlReport) : null });
+    runs.push({
+      url,
+      scores,
+      htmlReport: htmlReport ? path.basename(htmlReport) : null,
+    });
   }
 
   if (!runs.length) return null;
@@ -524,12 +570,12 @@ function generateLighthouseSummary(reportDir) {
     "# Lighthouse summary",
     "",
     "| URL | Perf | Acc | Best | SEO |",
-    "| --- | --- | --- | --- | --- |"
+    "| --- | --- | --- | --- | --- |",
   ];
   for (const run of runs) {
     const s = run.scores;
     md.push(
-      `| ${run.url} | ${s.performance ?? "-"} | ${s.accessibility ?? "-"} | ${s["best-practices"] ?? "-"} | ${s.seo ?? "-"} |`
+      `| ${run.url} | ${s.performance ?? "-"} | ${s.accessibility ?? "-"} | ${s["best-practices"] ?? "-"} | ${s.seo ?? "-"} |`,
     );
   }
   const mdPath = path.join(reportDir, "SUMMARY.md");
@@ -538,7 +584,9 @@ function generateLighthouseSummary(reportDir) {
   const rows = runs
     .map((run) => {
       const s = run.scores;
-      const link = run.htmlReport ? `<a href="./${run.htmlReport}">report</a>` : "report";
+      const link = run.htmlReport
+        ? `<a href="./${run.htmlReport}">report</a>`
+        : "report";
       return `<tr>
         <td>${run.url}</td>
         <td>${s.performance ?? "-"}</td>
@@ -599,42 +647,45 @@ function createReportIndex() {
       name: "Lighthouse",
       path: "lighthouse/summary.html",
       fallback: "lighthouse",
-      highlight: "Summary + per-page reports"
+      highlight: "Summary + per-page reports",
     },
     {
       name: "Accessibility (Pa11y)",
       path: "pa11y/report.html",
       fallback: "pa11y",
-      highlight: "report.html + stats.json"
+      highlight: "report.html + stats.json",
     },
     {
       name: "SEO",
       path: "seo/report.html",
       fallback: "seo",
-      highlight: "report.html + issues.json"
+      highlight: "report.html + issues.json",
     },
     {
       name: "Link check",
       path: "links/report.html",
       fallback: "links",
-      highlight: "report.html + links.json"
+      highlight: "report.html + links.json",
     },
     {
       name: "JSON-LD",
       path: "jsonld/report.txt",
       fallback: "jsonld",
-      highlight: "report.txt (validator output)"
-    }
+      highlight: "report.txt (validator output)",
+    },
   ];
 
   const cards = entries
     .filter(
       (entry) =>
         fs.existsSync(path.join(REPORT_ROOT, entry.path)) ||
-        (entry.fallback && fs.existsSync(path.join(REPORT_ROOT, entry.fallback)))
+        (entry.fallback &&
+          fs.existsSync(path.join(REPORT_ROOT, entry.fallback))),
     )
     .map((entry) => {
-      const href = fs.existsSync(path.join(REPORT_ROOT, entry.path)) ? entry.path : entry.fallback;
+      const href = fs.existsSync(path.join(REPORT_ROOT, entry.path))
+        ? entry.path
+        : entry.fallback;
       return `
         <div class="card">
           <h2>${entry.name}</h2>
@@ -684,7 +735,7 @@ async function main() {
 
   if (QUIET_MODE) {
     console.log(
-      `🤫 Quiet mode enabled (use --full or QUIET=0 to stream all output). Logs will be saved to ${LOG_ROOT}.`
+      `🤫 Quiet mode enabled (use --full or QUIET=0 to stream all output). Logs will be saved to ${LOG_ROOT}.`,
     );
   } else {
     console.log("🔊 Full output enabled; streaming command output directly.");
@@ -692,11 +743,18 @@ async function main() {
 
   console.log("🏗️  Building site...");
   try {
-    await runCommand("npm", ["run", "build"], { label: "Build site", logName: "build" });
+    await runCommand("npm", ["run", "build"], {
+      label: "Build site",
+      logName: "build",
+    });
   } catch (err) {
     if (err?.logPath) {
       console.error(`❌ Build failed (see ${err.logPath})`);
-      const tailLines = (err.tail || "").trim().split("\n").slice(-12).join("\n");
+      const tailLines = (err.tail || "")
+        .trim()
+        .split("\n")
+        .slice(-12)
+        .join("\n");
       if (QUIET_MODE && tailLines) {
         console.error(tailLines);
       }
@@ -707,7 +765,7 @@ async function main() {
   console.log("🚀 Starting local server for build output...");
   const siteServer = startStaticServer("./build", SITE_PORT, "site", {
     quiet: QUIET_MODE,
-    logName: "site-serve"
+    logName: "site-serve",
   });
   try {
     await waitForServer(BASE_URL);
@@ -716,7 +774,9 @@ async function main() {
     console.log("🔎 Discovering site URLs from sitemap (en/fr only)...");
     let urls = getUrlsFromSitemap(BASE_URL);
     if (!urls.length) {
-      console.log("ℹ️  Sitemap empty or missing, falling back to crawl of built site.");
+      console.log(
+        "ℹ️  Sitemap empty or missing, falling back to crawl of built site.",
+      );
       urls = await crawlAllPages(BASE_URL);
     }
     urls = urls.filter((u) => {
@@ -729,7 +789,9 @@ async function main() {
     });
     urls = filterLocationPages(urls);
     if (!urls.length) {
-      throw new Error("No URLs found to test (sitemap empty and crawl produced none).");
+      throw new Error(
+        "No URLs found to test (sitemap empty and crawl produced none).",
+      );
     }
     console.log(`   Found ${urls.length} pages to test`);
     urls.forEach((u) => console.log("  -", u));
@@ -765,7 +827,9 @@ async function main() {
     let lighthouseStarted = 0;
     const lighthouseTotal = urls.length;
     if (selectedChecks.lighthouse && QUIET_MODE) {
-      console.log("🔦 Lighthouse: will log each page as it starts; progress updates inline.");
+      console.log(
+        "🔦 Lighthouse: will log each page as it starts; progress updates inline.",
+      );
     }
 
     await runStep(
@@ -773,7 +837,13 @@ async function main() {
       async () => {
         const result = await runCommand(
           "npx",
-          ["lhci", "autorun", "--config", "lighthouserc.cjs", ...(QUIET_MODE ? ["--quiet"] : [])],
+          [
+            "lhci",
+            "autorun",
+            "--config",
+            "lighthouserc.cjs",
+            ...(QUIET_MODE ? ["--quiet"] : []),
+          ],
           {
             label: "Lighthouse",
             logName: "lighthouse",
@@ -784,7 +854,7 @@ async function main() {
               LHCI_URLS_FILE: urlsFile,
               LHCI_REPORT_DIR: path.join(REPORT_ROOT, "lighthouse"),
               LHCI_RUNS: "1",
-              ...(QUIET_MODE ? { LHCI_LOG_LEVEL: "silent" } : {})
+              ...(QUIET_MODE ? { LHCI_LOG_LEVEL: "silent" } : {}),
             },
             onLine: QUIET_MODE
               ? ({ line }) => {
@@ -798,8 +868,8 @@ async function main() {
                     process.stdout.write(`\r${progress}`);
                   }
                 }
-              : undefined
-          }
+              : undefined,
+          },
         );
         if (QUIET_MODE && lighthouseStarted > 0) {
           process.stdout.write("\n");
@@ -811,18 +881,21 @@ async function main() {
             : assertionCount > 0
               ? `Lighthouse assertions: ${assertionCount} (log: ${result.logPath})`
               : "Lighthouse: 0 assertion failures";
-        const failed = assertionCount > 0 || (result?.exitCode && result.exitCode !== 0);
+        const failed =
+          assertionCount > 0 || (result?.exitCode && result.exitCode !== 0);
         return { summary, failed };
       },
-      selectedChecks.lighthouse
+      selectedChecks.lighthouse,
     );
     let lighthouseSummary = null;
     if (selectedChecks.lighthouse) {
-      lighthouseSummary = generateLighthouseSummary(path.join(REPORT_ROOT, "lighthouse"));
+      lighthouseSummary = generateLighthouseSummary(
+        path.join(REPORT_ROOT, "lighthouse"),
+      );
       if (!lighthouseSummary) {
         lighthouseSummary = ensureLighthousePlaceholder(
           path.join(REPORT_ROOT, "lighthouse"),
-          "Lighthouse output was not generated (step may have failed)."
+          "Lighthouse output was not generated (step may have failed).",
         );
       }
     }
@@ -840,9 +913,14 @@ async function main() {
             urlsFile,
             "--report-dir",
             path.join(REPORT_ROOT, "pa11y"),
-            QUIET_MODE ? "--quiet" : ""
+            QUIET_MODE ? "--quiet" : "",
           ].filter(Boolean),
-          { label: "Pa11y", logName: "pa11y", allowFailure: true, forceLog: true }
+          {
+            label: "Pa11y",
+            logName: "pa11y",
+            allowFailure: true,
+            forceLog: true,
+          },
         );
         const counts = summarizePa11y(path.join(REPORT_ROOT, "pa11y"));
         const errors = counts?.errors ?? 0;
@@ -851,10 +929,11 @@ async function main() {
           errors || warnings
             ? `Pa11y issues: ${errors} errors${warnings ? `, ${warnings} warnings` : ""}`
             : "Pa11y issues: 0";
-        const failed = errors > 0 || (result?.exitCode && result.exitCode !== 0);
+        const failed =
+          errors > 0 || (result?.exitCode && result.exitCode !== 0);
         return { summary, failed };
       },
-      selectedChecks.pa11y
+      selectedChecks.pa11y,
     );
 
     await runStep(
@@ -870,9 +949,14 @@ async function main() {
             urlsFile,
             "--report-dir",
             path.join(REPORT_ROOT, "seo"),
-            QUIET_MODE ? "--quiet" : ""
+            QUIET_MODE ? "--quiet" : "",
           ].filter(Boolean),
-          { label: "SEO audit", logName: "seo", allowFailure: true, forceLog: true }
+          {
+            label: "SEO audit",
+            logName: "seo",
+            allowFailure: true,
+            forceLog: true,
+          },
         );
         const counts = summarizeSeo(path.join(REPORT_ROOT, "seo"));
         const errors = counts?.errors ?? 0;
@@ -881,10 +965,11 @@ async function main() {
           errors || warnings
             ? `SEO issues: ${errors} errors${warnings ? `, ${warnings} warnings` : ""}`
             : "SEO issues: 0";
-        const failed = errors > 0 || (result?.exitCode && result.exitCode !== 0);
+        const failed =
+          errors > 0 || (result?.exitCode && result.exitCode !== 0);
         return { summary, failed };
       },
-      selectedChecks.seo
+      selectedChecks.seo,
     );
 
     await runStep(
@@ -900,19 +985,25 @@ async function main() {
             urlsFile,
             "--report-dir",
             path.join(REPORT_ROOT, "links"),
-            QUIET_MODE ? "--quiet" : ""
+            QUIET_MODE ? "--quiet" : "",
           ].filter(Boolean),
-          { label: "Link check", logName: "links", allowFailure: true, forceLog: true }
+          {
+            label: "Link check",
+            logName: "links",
+            allowFailure: true,
+            forceLog: true,
+          },
         );
         const counts = summarizeLinks(path.join(REPORT_ROOT, "links"));
         const broken = counts?.broken ?? 0;
         const summary = broken
           ? `Link check: ${broken} broken link(s)`
           : "Link check: 0 broken links";
-        const failed = broken > 0 || (result?.exitCode && result.exitCode !== 0);
+        const failed =
+          broken > 0 || (result?.exitCode && result.exitCode !== 0);
         return { summary, failed };
       },
-      selectedChecks.links
+      selectedChecks.links,
     );
 
     await runStep(
@@ -920,14 +1011,18 @@ async function main() {
       async () => {
         const result = await runCommand(
           "node",
-          [toolkitScriptPath("jsonld-validate.mjs"), "build", `--urls-file=${urlsFile}`],
+          [
+            toolkitScriptPath("jsonld-validate.mjs"),
+            "build",
+            `--urls-file=${urlsFile}`,
+          ],
           {
             label: "JSON-LD validation",
             logName: "jsonld",
             allowFailure: true,
             forceLog: true,
-            quiet: QUIET_MODE
-          }
+            quiet: QUIET_MODE,
+          },
         );
 
         const reportDir = path.join(REPORT_ROOT, "jsonld");
@@ -945,7 +1040,7 @@ async function main() {
           : "JSON-LD: 0 issues detected";
         return { summary, failed };
       },
-      selectedChecks.jsonld
+      selectedChecks.jsonld,
     );
 
     console.log("🛑 Stopping site server...");
@@ -961,12 +1056,14 @@ async function main() {
     console.log(`🌐 Starting report server on ${reportUrl} (Ctrl+C to stop)`);
     const reportServer = startStaticServer(REPORT_ROOT, REPORT_PORT, "report", {
       quiet: QUIET_MODE,
-      logName: "report-serve"
+      logName: "report-serve",
     });
     try {
       await waitForServer(reportUrl);
     } catch {
-      console.error(`⚠️  Report server did not become ready at ${reportUrl} (continuing anyway).`);
+      console.error(
+        `⚠️  Report server did not become ready at ${reportUrl} (continuing anyway).`,
+      );
     }
     console.log(`🔗 Reports available at ${reportUrl}`);
     const opened = openInBrowser(reportUrl);

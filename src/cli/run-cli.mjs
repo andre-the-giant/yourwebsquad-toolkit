@@ -75,7 +75,9 @@ function runFormat(args) {
     return 1;
   }
 
-  const forwarded = Array.isArray(args) ? [...args] : [];
+  const userArgs = Array.isArray(args) ? [...args] : [];
+  const hasUserTarget = userArgs.some((arg) => arg && !arg.startsWith("-"));
+  const forwarded = [...userArgs];
   const hasCheck = forwarded.includes("--check");
   const hasWrite = forwarded.includes("--write");
   if (!hasCheck && !hasWrite) {
@@ -85,8 +87,7 @@ function runFormat(args) {
     forwarded.unshift(astroPlugin);
     forwarded.unshift("--plugin");
   }
-  const hasTarget = forwarded.some((arg) => !arg.startsWith("-"));
-  if (!hasTarget) {
+  if (!hasUserTarget) {
     forwarded.push(".");
   }
 

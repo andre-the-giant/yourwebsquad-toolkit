@@ -1,0 +1,17 @@
+{
+  "name": "yourwebsquad-toolkit",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "build": "echo \"No build step configured for yourwebsquad-toolkit yet.\"",
+    "bumpitup": "node ./scripts/bumpitup.js"
+  },
+  "devDependencies": {
+    "chalk": "^5.3.0",
+    "execa": "^9.5.2",
+    "inquirer": "^9.2.23",
+    "prettier": "^3.3.3"
+  }
+}

@@ -3,15 +3,31 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "bin": {
+    "yws-toolkit": "./bin/yws-toolkit.mjs"
+  },
   "scripts": {
     "format": "prettier --write .",
     "build": "echo \"No build step configured for yourwebsquad-toolkit yet.\"",
-    "bumpitup": "node ./scripts/bumpitup.js"
+    "bumpitup": "node ./scripts/bumpitup.js",
+    "toolkit": "node ./bin/yws-toolkit.mjs"
+  },
+  "dependencies": {
+    "@lhci/cli": "^0.15.1",
+    "chalk": "^5.3.0",
+    "cheerio": "^1.1.0",
+    "execa": "^9.5.2",
+    "inquirer": "^9.3.7",
+    "pa11y": "^9.0.1",
+    "semver": "^7.6.2",
+    "serve": "^14.2.5",
+    "structured-data-testing-tool": "^4.5.0",
+    "wait-on": "^9.0.3"
   },
   "devDependencies": {
-    "chalk": "^5.3.0",
-    "execa": "^9.5.2",
-    "inquirer": "^9.2.23",
     "prettier": "^3.3.3"
   }
 }

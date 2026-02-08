@@ -299,6 +299,12 @@ async function updateSegments({ segmentKey, segmentFr, segmentEn }) {
       );
     }
     if (updatedBlock === block) {
+      const inlineEmptyObject = block.match(/^(\s*[^=]+=\s*)\{\s*\};\s*$/);
+      if (inlineEmptyObject) {
+        updatedBlock = `${inlineEmptyObject[1]}{\n${insertion}};`;
+      }
+    }
+    if (updatedBlock === block) {
       throw new Error(insertError);
     }
     const next = raw.replace(block, updatedBlock);

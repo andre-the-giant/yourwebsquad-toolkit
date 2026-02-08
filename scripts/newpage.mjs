@@ -3,7 +3,7 @@
 import { execSync } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import chalk from "chalk";
 import inquirer from "inquirer";
 
@@ -63,6 +63,145 @@ function normalizeSlug(value) {
 
 function normalizeSegment(value) {
   return normalizeSlug(value);
+}
+
+function normalizeLocale(value) {
+  if (!value) return "";
+  return String(value).trim().toLowerCase();
+}
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function fieldName(prefix, locale) {
+  return `${prefix}_${locale.replace(/[^a-z0-9]/gi, "_")}`;
+}
+
+function localeLabel(locale, defaultLocale) {
+  return locale === defaultLocale ? `${locale}, default` : locale;
+}
+
+function extractLocaleConfig(i18nConfig) {
+  if (!i18nConfig || typeof i18nConfig !== "object") return null;
+
+  let locales = [];
+  const rawLocales = i18nConfig.locales;
+  if (Array.isArray(rawLocales)) {
+    locales = rawLocales
+      .map((entry) => {
+        if (typeof entry === "string") return entry;
+        if (entry && typeof entry === "object") {
+          if (typeof entry.path === "string") return entry.path;
+          if (typeof entry.code === "string") return entry.code;
+          if (
+            Array.isArray(entry.codes) &&
+            typeof entry.codes[0] === "string"
+          ) {
+            return entry.codes[0];
+          }
+        }
+        return "";
+      })
+      .map(normalizeLocale);
+  } else if (rawLocales && typeof rawLocales === "object") {
+    locales = Object.keys(rawLocales).map(normalizeLocale);
+  }
+
+  locales = unique(locales);
+  if (!locales.length) return null;
+
+  let defaultLocale = normalizeLocale(i18nConfig.defaultLocale);
+  if (!defaultLocale || !locales.includes(defaultLocale)) {
+    defaultLocale = locales.includes("en") ? "en" : locales[0];
+  }
+
+  return { locales, defaultLocale };
+}
+
+async function resolveLocaleConfigFromAstroConfig() {
+  const configPath = path.join(process.cwd(), "astro.config.mjs");
+  try {
+    await fs.access(configPath);
+  } catch {
+    return null;
+  }
+
+  const previousSiteUrl = process.env.SITE_URL;
+  const previousStagingUrl = process.env.STAGING_URL;
+  const previousNodeEnv = process.env.NODE_ENV;
+
+  if (!process.env.SITE_URL) process.env.SITE_URL = "https://example.com/";
+  if (!process.env.STAGING_URL) process.env.STAGING_URL = process.env.SITE_URL;
+  if (!process.env.NODE_ENV) process.env.NODE_ENV = "development";
+
+  try {
+    const configModule = await import(
+      `${pathToFileURL(configPath).href}?v=${Date.now()}`
+    );
+    let rawConfig = configModule?.default;
+    if (typeof rawConfig === "function") {
+      rawConfig = await rawConfig({
+        command: "build",
+        mode: process.env.NODE_ENV || "development",
+      });
+    }
+    const localeConfig = extractLocaleConfig(rawConfig?.i18n);
+    if (!localeConfig) return null;
+    return { ...localeConfig, source: "astro.config.mjs" };
+  } catch {
+    return null;
+  } finally {
+    if (previousSiteUrl === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = previousSiteUrl;
+    if (previousStagingUrl === undefined) delete process.env.STAGING_URL;
+    else process.env.STAGING_URL = previousStagingUrl;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+}
+
+async function resolveLocaleConfigFromContent() {
+  const contentRoot = path.join(process.cwd(), "public", "content");
+  let entries = [];
+  try {
+    entries = await fs.readdir(contentRoot, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  const localePattern = /^[a-z]{2}(?:-[a-z0-9]{2,8})*$/i;
+  const locales = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => normalizeLocale(entry.name))
+    .filter((entry) => localePattern.test(entry));
+
+  if (!locales.length) return null;
+
+  const uniqueLocales = unique(locales);
+  return {
+    locales: uniqueLocales,
+    defaultLocale: uniqueLocales.includes("en") ? "en" : uniqueLocales[0],
+    source: "public/content/* fallback",
+  };
+}
+
+async function resolveLocaleConfig() {
+  const fromAstro = await resolveLocaleConfigFromAstroConfig();
+  if (fromAstro) return fromAstro;
+
+  const fromContent = await resolveLocaleConfigFromContent();
+  if (fromContent) return fromContent;
+
+  return {
+    locales: ["en"],
+    defaultLocale: "en",
+    source: "default fallback",
+  };
 }
 
 function requireNonEmpty(label, value) {
@@ -128,7 +267,13 @@ function getTemplatePath(routeType) {
   return path.join(toolkitRoot, "scripts", "templates", name);
 }
 
-async function renderTemplate({ routeType, slug, segmentKey }) {
+async function renderTemplate({
+  routeType,
+  slug,
+  segmentKey,
+  locales,
+  defaultLocale,
+}) {
   const templatePath = getTemplatePath(routeType);
   try {
     await fs.access(templatePath);
@@ -140,6 +285,8 @@ async function renderTemplate({ routeType, slug, segmentKey }) {
   if (routeType === "segment") {
     rendered = rendered.replaceAll("__SEGMENT_KEY__", segmentKey);
   }
+  rendered = rendered.replaceAll("__LOCALES__", JSON.stringify(locales));
+  rendered = rendered.replaceAll("__DEFAULT_LOCALE__", defaultLocale);
   return rendered;
 }
 
@@ -171,11 +318,23 @@ async function ensureNotExists(filePath) {
   }
 }
 
-async function writeAstroTemplate({ routeType, slug, segmentKey }) {
+async function writeAstroTemplate({
+  routeType,
+  slug,
+  segmentKey,
+  locales,
+  defaultLocale,
+}) {
   const target = getAstroPagePath({ routeType, slug, segmentKey });
   await ensureNotExists(target);
   await fs.mkdir(path.dirname(target), { recursive: true });
-  const template = await renderTemplate({ routeType, slug, segmentKey });
+  const template = await renderTemplate({
+    routeType,
+    slug,
+    segmentKey,
+    locales,
+    defaultLocale,
+  });
   await fs.writeFile(target, template, "utf8");
   return target;
 }
@@ -191,17 +350,10 @@ function buildSeoJson(locale, title, description) {
   };
 }
 
-async function writeSeoJsonFiles({
-  slug,
-  seoTitleFr,
-  seoDescFr,
-  seoTitleEn,
-  seoDescEn,
-}) {
-  const frPath = getContentPath("fr", slug);
-  const enPath = getContentPath("en", slug);
+async function writeSeoJsonFiles({ slug, locales, seoByLocale }) {
+  const paths = locales.map((locale) => getContentPath(locale, slug));
   const existing = [];
-  for (const filePath of [frPath, enPath]) {
+  for (const filePath of paths) {
     try {
       await fs.access(filePath);
       existing.push(filePath);
@@ -222,19 +374,22 @@ async function writeSeoJsonFiles({
       throw new Error("Aborted: content JSON already exists.");
     }
   }
-  const frPayload = buildSeoJson("fr", seoTitleFr, seoDescFr);
-  const enPayload = buildSeoJson("en", seoTitleEn, seoDescEn);
+  for (const locale of locales) {
+    const filePath = getContentPath(locale, slug);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const seo = seoByLocale[locale];
+    const payload = buildSeoJson(locale, seo.title, seo.description);
+    await fs.writeFile(
+      filePath,
+      `${JSON.stringify(payload, null, 2)}\n`,
+      "utf8",
+    );
+  }
 
-  await fs.mkdir(path.dirname(frPath), { recursive: true });
-  await fs.mkdir(path.dirname(enPath), { recursive: true });
-
-  await fs.writeFile(frPath, `${JSON.stringify(frPayload, null, 2)}\n`, "utf8");
-  await fs.writeFile(enPath, `${JSON.stringify(enPayload, null, 2)}\n`, "utf8");
-
-  return { frPath, enPath };
+  return { paths };
 }
 
-async function updateSegments({ segmentKey, segmentFr, segmentEn }) {
+async function updateSegments({ segmentKey, localeSegments }) {
   const rootConfigPath = path.join(process.cwd(), "segments.config.mjs");
   const configPath = path.join(
     process.cwd(),
@@ -268,16 +423,26 @@ async function updateSegments({ segmentKey, segmentFr, segmentEn }) {
     }
 
     const block = match[0];
+    const segmentKeyEscaped = escapeRegExp(segmentKey);
     const extractEntry = (text) => {
       const entryMatch = text.match(
-        new RegExp(
-          `${segmentKey}:\\s*\\{\\s*fr:\\s*\"([^\"]+)\",\\s*en:\\s*\"([^\"]+)\"\\s*\\}`,
-        ),
+        new RegExp(`${segmentKeyEscaped}:\\s*\\{([\\s\\S]*?)\\}`, "m"),
       );
       if (!entryMatch) return null;
-      return { fr: entryMatch[1], en: entryMatch[2] };
+      const localeMapRaw = entryMatch[1];
+      const localeMap = {};
+      const localeRegex = /([a-zA-Z0-9_-]+)\s*:\s*"([^"]+)"/g;
+      let localeMatch;
+      while ((localeMatch = localeRegex.exec(localeMapRaw)) !== null) {
+        localeMap[localeMatch[1]] = localeMatch[2];
+      }
+      if (!Object.keys(localeMap).length) return null;
+      return localeMap;
     };
-    const existingKeyRegex = new RegExp(`\\n\\s*${segmentKey}:\\s*\\{`, "m");
+    const existingKeyRegex = new RegExp(
+      `\\n\\s*${segmentKeyEscaped}:\\s*\\{`,
+      "m",
+    );
     if (existingKeyRegex.test(block)) {
       const existing = extractEntry(block);
       return {
@@ -287,7 +452,10 @@ async function updateSegments({ segmentKey, segmentFr, segmentEn }) {
       };
     }
 
-    const insertion = `  ${segmentKey}: { fr: \"${segmentFr}\", en: \"${segmentEn}\" },\n`;
+    const serializedLocales = Object.entries(localeSegments)
+      .map(([locale, value]) => `${locale}: "${value}"`)
+      .join(", ");
+    const insertion = `  ${segmentKey}: { ${serializedLocales} },\n`;
     let updatedBlock = block.replace(
       mapHeaderRegex,
       `${mapHeaderLiteral}$1${insertion}`,
@@ -367,7 +535,20 @@ async function updateMenu({ locale, navPlacement, label, href }) {
     locale,
     "menu.json",
   );
-  const raw = await fs.readFile(menuPath, "utf8");
+  let raw;
+  try {
+    raw = await fs.readFile(menuPath, "utf8");
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      return {
+        path: menuPath,
+        updated: false,
+        skipped: true,
+        reason: "missing-menu-file",
+      };
+    }
+    throw err;
+  }
   const menu = JSON.parse(raw);
 
   if (!Array.isArray(menu)) {
@@ -412,8 +593,9 @@ async function updateMenu({ locale, navPlacement, label, href }) {
   return { path: menuPath, updated: true };
 }
 
-async function promptConfig() {
-  return inquirer.prompt([
+async function promptConfig(localeConfig) {
+  const { locales, defaultLocale } = localeConfig;
+  const questions = [
     {
       type: "list",
       name: "routeType",
@@ -439,22 +621,6 @@ async function promptConfig() {
       filter: (val) => normalizeSegment(val),
     },
     {
-      type: "input",
-      name: "segmentFr",
-      message: "Segment value (fr):",
-      when: (answers) => answers.routeType === "segment",
-      validate: (val) => validateSegment("French segment", val),
-      filter: (val) => normalizeSegment(val),
-    },
-    {
-      type: "input",
-      name: "segmentEn",
-      message: "Segment value (en):",
-      when: (answers) => answers.routeType === "segment",
-      validate: (val) => validateSegment("English segment", val),
-      filter: (val) => normalizeSegment(val),
-    },
-    {
       type: "list",
       name: "navPlacement",
       message: "Navigation placement?",
@@ -465,122 +631,147 @@ async function promptConfig() {
         { name: "None", value: "none" },
       ],
     },
-    {
+  ];
+
+  for (const locale of locales) {
+    questions.push({
       type: "input",
-      name: "labelFr",
-      message: "Menu label (fr):",
+      name: fieldName("segmentValue", locale),
+      message: `Segment value (${localeLabel(locale, defaultLocale)}):`,
+      when: (answers) => answers.routeType === "segment",
+      validate: (val) => validateSegment(`Segment (${locale})`, val),
+      filter: (val) => normalizeSegment(val),
+    });
+  }
+
+  for (const locale of locales) {
+    questions.push({
+      type: "input",
+      name: fieldName("menuLabel", locale),
+      message: `Menu label (${localeLabel(locale, defaultLocale)}):`,
       when: (answers) => answers.navPlacement !== "none",
-      validate: (val) => requireNonEmpty("French label", val),
-    },
-    {
+      validate: (val) => requireNonEmpty(`Menu label (${locale})`, val),
+    });
+  }
+
+  for (const locale of locales) {
+    questions.push({
       type: "input",
-      name: "labelEn",
-      message: "Menu label (en):",
-      when: (answers) => answers.navPlacement !== "none",
-      validate: (val) => requireNonEmpty("English label", val),
-    },
-    {
+      name: fieldName("seoTitle", locale),
+      message: `SEO title (${localeLabel(locale, defaultLocale)}):`,
+      validate: (val) => requireNonEmpty(`SEO title (${locale})`, val),
+    });
+    questions.push({
       type: "input",
-      name: "seoTitleFr",
-      message: "SEO title (fr):",
-      validate: (val) => requireNonEmpty("French SEO title", val),
-    },
-    {
-      type: "input",
-      name: "seoDescFr",
-      message: "SEO description (fr):",
-      validate: (val) => requireNonEmpty("French SEO description", val),
-    },
-    {
-      type: "input",
-      name: "seoTitleEn",
-      message: "SEO title (en):",
-      validate: (val) => requireNonEmpty("English SEO title", val),
-    },
-    {
-      type: "input",
-      name: "seoDescEn",
-      message: "SEO description (en):",
-      validate: (val) => requireNonEmpty("English SEO description", val),
-    },
-  ]);
+      name: fieldName("seoDescription", locale),
+      message: `SEO description (${localeLabel(locale, defaultLocale)}):`,
+      validate: (val) => requireNonEmpty(`SEO description (${locale})`, val),
+    });
+  }
+
+  return inquirer.prompt(questions);
 }
 
 async function main() {
   ensureCleanGit();
-  const answers = await promptConfig();
-  const {
-    routeType,
-    slug,
-    segmentKey,
-    segmentFr,
-    segmentEn,
-    navPlacement,
-    labelFr,
-    labelEn,
-    seoTitleFr,
-    seoDescFr,
-    seoTitleEn,
-    seoDescEn,
-  } = answers;
+  const localeConfig = await resolveLocaleConfig();
+  const { locales, defaultLocale, source } = localeConfig;
+  logInfo(
+    `Locales detected from ${source}: ${locales.join(", ")} (default: ${defaultLocale})`,
+  );
 
-  let resolvedSegmentFr = segmentFr;
-  let resolvedSegmentEn = segmentEn;
+  const answers = await promptConfig(localeConfig);
+  const { routeType, slug, segmentKey, navPlacement } = answers;
+
+  const segmentByLocale = {};
+  const labelByLocale = {};
+  const seoByLocale = {};
+  for (const locale of locales) {
+    const segmentValueKey = fieldName("segmentValue", locale);
+    const menuLabelKey = fieldName("menuLabel", locale);
+    const seoTitleKey = fieldName("seoTitle", locale);
+    const seoDescriptionKey = fieldName("seoDescription", locale);
+
+    if (routeType === "segment") {
+      segmentByLocale[locale] = answers[segmentValueKey];
+    }
+    if (navPlacement !== "none") {
+      labelByLocale[locale] = answers[menuLabelKey];
+    }
+    seoByLocale[locale] = {
+      title: answers[seoTitleKey],
+      description: answers[seoDescriptionKey],
+    };
+  }
+
+  let resolvedSegmentByLocale = { ...segmentByLocale };
   if (routeType === "segment") {
-    const result = await updateSegments({ segmentKey, segmentFr, segmentEn });
+    const result = await updateSegments({
+      segmentKey,
+      localeSegments: segmentByLocale,
+    });
     if (!result.updated && result.existing) {
-      resolvedSegmentFr = result.existing.fr || segmentFr;
-      resolvedSegmentEn = result.existing.en || segmentEn;
+      resolvedSegmentByLocale = { ...segmentByLocale, ...result.existing };
     }
   }
 
-  const frHref = getLocalizedHref({
-    routeType,
-    locale: "fr",
-    slug,
-    segmentValue: resolvedSegmentFr,
-  });
-  const enHref = getLocalizedHref({
-    routeType,
-    locale: "en",
-    slug,
-    segmentValue: resolvedSegmentEn,
-  });
-
-  if (navPlacement !== "none") {
-    await updateMenu({
-      locale: "fr",
-      navPlacement,
-      label: labelFr,
-      href: frHref,
-    });
-    await updateMenu({
-      locale: "en",
-      navPlacement,
-      label: labelEn,
-      href: enHref,
+  const hrefByLocale = {};
+  for (const locale of locales) {
+    hrefByLocale[locale] = getLocalizedHref({
+      routeType,
+      locale,
+      slug,
+      segmentValue:
+        resolvedSegmentByLocale[locale] ||
+        resolvedSegmentByLocale[defaultLocale],
     });
   }
 
-  await writeSeoJsonFiles({
-    slug,
-    seoTitleFr,
-    seoDescFr,
-    seoTitleEn,
-    seoDescEn,
-  });
+  if (navPlacement !== "none") {
+    const menuResults = [];
+    for (const locale of locales) {
+      const menuResult = await updateMenu({
+        locale,
+        navPlacement,
+        label: labelByLocale[locale] || labelByLocale[defaultLocale],
+        href: hrefByLocale[locale],
+      });
+      menuResults.push(menuResult);
+    }
+    const skippedMenus = menuResults.filter((result) => result.skipped);
+    if (skippedMenus.length) {
+      skippedMenus.forEach((result) => {
+        console.log(
+          chalk.yellow(`Skipping menu update (missing file): ${result.path}`),
+        );
+      });
+    }
+  }
 
-  const astroPath = await writeAstroTemplate({ routeType, slug, segmentKey });
+  const contentResult = await writeSeoJsonFiles({ slug, locales, seoByLocale });
+
+  const astroPath = await writeAstroTemplate({
+    routeType,
+    slug,
+    segmentKey,
+    locales,
+    defaultLocale,
+  });
   logSuccess("New page created.");
+  const frHref = hrefByLocale.fr || null;
+  const enHref = hrefByLocale.en || null;
   console.log(
     JSON.stringify(
       {
         routeType,
         slug,
+        locales,
+        defaultLocale,
         frHref,
         enHref,
+        hrefByLocale,
         astroPath,
-        contentPaths: [getContentPath("fr", slug), getContentPath("en", slug)],
+        contentPaths: contentResult.paths,
       },
       null,
       2,

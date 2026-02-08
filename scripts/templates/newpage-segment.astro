@@ -17,10 +17,11 @@ const helperConfig = {
   defaultLang,
   seoDefaults: defaultSeoValues
 };
+const supportedLocales = __LOCALES__;
+const fallbackLocale = "__DEFAULT_LOCALE__";
 
 export async function getStaticPaths() {
-  const locales = ["fr", "en"];
-  return locales.map((locale) => ({
+  return supportedLocales.map((locale) => ({
     params: {
       lang: locale,
       __SEGMENT_KEY__Segment: getSegment(locale, "__SEGMENT_KEY__"),
@@ -29,7 +30,7 @@ export async function getStaticPaths() {
 }
 
 const { lang, __SEGMENT_KEY__Segment } = Astro.params;
-const locale = lang === "en" ? "en" : "fr";
+const locale = supportedLocales.includes(lang) ? lang : fallbackLocale;
 assertSegmentMatch(locale, "__SEGMENT_KEY__", __SEGMENT_KEY__Segment);
 
 const content = await getContent(locale, "__SLUG__");

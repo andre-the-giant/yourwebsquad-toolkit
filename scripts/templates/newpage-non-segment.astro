@@ -1,7 +1,8 @@
 ---
 import MainLayout from "@layouts/Main.astro";
-import { getContent, getCompany } from "@helpers/content";
-import { buildSeo, buildJsonLd } from "@helpers/seo";
+import { createContentHelpers } from "@toolkit/content";
+import { buildJsonLd, buildSeo } from "@toolkit/seo";
+import { defaultLang, defaultSeoValues, hreflangMapDefault } from "../../../../seo.config.mjs";
 
 export async function getStaticPaths() {
   return [{ params: { lang: "fr" } }, { params: { lang: "en" } }];
@@ -9,6 +10,14 @@ export async function getStaticPaths() {
 
 const { lang } = Astro.params;
 const locale = lang === "en" ? "en" : "fr";
+const normalizedSite = (import.meta.env.SITE_URL || "").replace(/\/+$/, "");
+const helperConfig = {
+  siteUrl: normalizedSite,
+  hreflangMap: hreflangMapDefault,
+  defaultLang,
+  seoDefaults: defaultSeoValues
+};
+const { getContent, getCompany } = createContentHelpers();
 
 const content = await getContent(locale, "__SLUG__");
 const company = await getCompany("company");
@@ -20,7 +29,7 @@ const seo = buildSeo({
   locale,
   path,
   overrides: content.seo,
-});
+}, helperConfig);
 
 const defaultLocation =
   (company.locations || []).find((loc) => loc.isDefault) ||
@@ -51,7 +60,7 @@ const jsonLd = buildJsonLd({
   openingHours: contact.hours?.openingHours,
   sameAs,
   image: content.seo?.image || social.image?.url,
-});
+}, helperConfig);
 const seoPayload = { ...seo, jsonLd };
 ---
 

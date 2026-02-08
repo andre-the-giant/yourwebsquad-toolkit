@@ -8,7 +8,6 @@ It centralizes formatting, quality checks, dependency updaters, and page scaffol
 
 https://YourWebSquad.com
 
-
 ## Introduction
 
 Use a pinned GitHub tag in the consumer project's `package.json`:

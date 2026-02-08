@@ -235,62 +235,122 @@ async function writeSeoJsonFiles({
 }
 
 async function updateSegments({ segmentKey, segmentFr, segmentEn }) {
-  const segmentsPath = path.join(
+  const rootConfigPath = path.join(process.cwd(), "segments.config.mjs");
+  const configPath = path.join(
     process.cwd(),
     "src",
     "helpers",
-    "segments.js",
+    "segments.config.mjs",
   );
-  const raw = await fs.readFile(segmentsPath, "utf8");
-  const match = raw.match(/const segments = \{([\s\S]*?)\};/);
-  if (!match) {
-    throw new Error("Unable to find segments map in src/helpers/segments.js");
+  const legacyPath = path.join(process.cwd(), "src", "helpers", "segments.js");
+
+  async function pathExists(filePath) {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  const block = match[0];
-  const extractEntry = (text) => {
-    const entryMatch = text.match(
-      new RegExp(
-        `${segmentKey}:\\s*\\{\\s*fr:\\s*\"([^\"]+)\",\\s*en:\\s*\"([^\"]+)\"\\s*\\}`,
-      ),
-    );
-    if (!entryMatch) return null;
-    return { fr: entryMatch[1], en: entryMatch[2] };
-  };
-  const existingKeyRegex = new RegExp(`\\n\\s*${segmentKey}:\\s*\\{`, "m");
-  if (existingKeyRegex.test(block)) {
-    const existing = extractEntry(block);
-    return {
-      updated: false,
-      path: segmentsPath,
-      existing,
+  async function updateInFile({
+    filePath,
+    mapRegex,
+    mapHeaderRegex,
+    mapHeaderLiteral,
+    noMapError,
+    insertError,
+  }) {
+    const raw = await fs.readFile(filePath, "utf8");
+    const match = raw.match(mapRegex);
+    if (!match) {
+      throw new Error(noMapError);
+    }
+
+    const block = match[0];
+    const extractEntry = (text) => {
+      const entryMatch = text.match(
+        new RegExp(
+          `${segmentKey}:\\s*\\{\\s*fr:\\s*\"([^\"]+)\",\\s*en:\\s*\"([^\"]+)\"\\s*\\}`,
+        ),
+      );
+      if (!entryMatch) return null;
+      return { fr: entryMatch[1], en: entryMatch[2] };
     };
+    const existingKeyRegex = new RegExp(`\\n\\s*${segmentKey}:\\s*\\{`, "m");
+    if (existingKeyRegex.test(block)) {
+      const existing = extractEntry(block);
+      return {
+        updated: false,
+        path: filePath,
+        existing,
+      };
+    }
+
+    const insertion = `  ${segmentKey}: { fr: \"${segmentFr}\", en: \"${segmentEn}\" },\n`;
+    let updatedBlock = block.replace(
+      mapHeaderRegex,
+      `${mapHeaderLiteral}$1${insertion}`,
+    );
+    if (updatedBlock === block) {
+      updatedBlock = block.replace(
+        `${mapHeaderLiteral}\n`,
+        `${mapHeaderLiteral}\n${insertion}`,
+      );
+    }
+    if (updatedBlock === block) {
+      throw new Error(insertError);
+    }
+    const next = raw.replace(block, updatedBlock);
+
+    await fs.writeFile(filePath, next, "utf8");
+    const verify = extractEntry(updatedBlock);
+    if (!verify) {
+      throw new Error("Failed to verify inserted segment entry.");
+    }
+    return { updated: true, path: filePath, existing: verify };
   }
 
-  const insertion = `  ${segmentKey}: { fr: \"${segmentFr}\", en: \"${segmentEn}\" },\n`;
-  let updatedBlock = block.replace(
-    /const segments = \{(\r?\n)/,
-    `const segments = {$1${insertion}`,
+  if (await pathExists(rootConfigPath)) {
+    return updateInFile({
+      filePath: rootConfigPath,
+      mapRegex: /export const segments = \{([\s\S]*?)\};/,
+      mapHeaderRegex: /export const segments = \{(\r?\n)/,
+      mapHeaderLiteral: "export const segments = {",
+      noMapError: "Unable to find segments map in segments.config.mjs",
+      insertError:
+        "Failed to insert new segment. Check segments.config.mjs formatting.",
+    });
+  }
+
+  if (await pathExists(configPath)) {
+    return updateInFile({
+      filePath: configPath,
+      mapRegex: /export const segments = \{([\s\S]*?)\};/,
+      mapHeaderRegex: /export const segments = \{(\r?\n)/,
+      mapHeaderLiteral: "export const segments = {",
+      noMapError:
+        "Unable to find segments map in src/helpers/segments.config.mjs",
+      insertError:
+        "Failed to insert new segment. Check segments.config.mjs formatting.",
+    });
+  }
+
+  if (await pathExists(legacyPath)) {
+    return updateInFile({
+      filePath: legacyPath,
+      mapRegex: /const segments = \{([\s\S]*?)\};/,
+      mapHeaderRegex: /const segments = \{(\r?\n)/,
+      mapHeaderLiteral: "const segments = {",
+      noMapError: "Unable to find segments map in src/helpers/segments.js",
+      insertError:
+        "Failed to insert new segment. Check segments.js formatting.",
+    });
+  }
+
+  throw new Error(
+    "Unable to locate segments map. Expected segments.config.mjs, src/helpers/segments.config.mjs, or src/helpers/segments.js.",
   );
-  if (updatedBlock === block) {
-    updatedBlock = block.replace(
-      "const segments = {\n",
-      `const segments = {\n${insertion}`,
-    );
-  }
-  if (updatedBlock === block) {
-    throw new Error(
-      "Failed to insert new segment. Check segments.js formatting.",
-    );
-  }
-  const next = raw.replace(block, updatedBlock);
-
-  await fs.writeFile(segmentsPath, next, "utf8");
-  const verify = extractEntry(updatedBlock);
-  if (!verify) {
-    throw new Error("Failed to verify inserted segment entry.");
-  }
-  return { updated: true, path: segmentsPath, existing: verify };
 }
 
 async function updateMenu({ locale, navPlacement, label, href }) {

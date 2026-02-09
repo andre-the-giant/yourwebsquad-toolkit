@@ -3,15 +3,16 @@ import MainLayout from "@layouts/Main.astro";
 import { createContentHelpers } from "@toolkit/content";
 import { buildJsonLd, buildSeo } from "@toolkit/seo";
 import { defaultLang, defaultSeoValues, hreflangMapDefault } from "../../../../seo.config.mjs";
-const supportedLocales = __LOCALES__;
 const fallbackLocale = "__DEFAULT_LOCALE__";
 
 export async function getStaticPaths() {
+  const supportedLocales = __LOCALES__;
   return supportedLocales.map((locale) => ({
     params: { lang: locale }
   }));
 }
 
+const supportedLocales = __LOCALES__;
 const { lang } = Astro.params;
 const locale = supportedLocales.includes(lang) ? lang : fallbackLocale;
 const normalizedSite = (import.meta.env.SITE_URL || "").replace(/\/+$/, "");

@@ -19,6 +19,13 @@ const CHECK_EXTERNAL = args.skipExternal
   ? false
   : process.env.CHECK_EXTERNAL_LINKS !== "0";
 const QUIET_MODE = Boolean(args.quiet || process.env.LINKS_QUIET === "1");
+const EXTERNAL_BOT_PROTECTION_HOSTS = new Set(
+  (process.env.LINK_CHECK_BOT_PROTECTION_HOSTS ||
+    "homestars.com,www.homestars.com")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+);
 
 const visited = new Set();
 const toVisit = new Set([BASE_URL]);
@@ -169,6 +176,45 @@ function normalizeUrl(url) {
   }
 }
 
+function isIgnoredScheme(href) {
+  const value = (href || "").trim().toLowerCase();
+  return (
+    value.startsWith("mailto:") ||
+    value.startsWith("tel:") ||
+    value.startsWith("sms:") ||
+    value.startsWith("javascript:") ||
+    value.startsWith("#")
+  );
+}
+
+function hasClassAncestor($, el, className) {
+  let current = el;
+  while (current && current.type === "tag") {
+    const classes = (current.attribs?.class || "").split(/\s+/).filter(Boolean);
+    if (classes.includes(className)) return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+function shouldSkipLink($, el, href) {
+  if (isIgnoredScheme(href)) return true;
+
+  // GoogleReviews outputs a "more-reviews" link that is hidden client-side.
+  // Skip it to avoid false positives in static HTML checks.
+  if (hasClassAncestor($, el, "more-reviews")) return true;
+
+  return false;
+}
+
+function getHost(url) {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 function isInternal(url) {
   return normalizeUrl(url).startsWith(normalizeUrl(BASE_URL));
 }
@@ -256,6 +302,22 @@ async function checkLink(url, isExternal) {
     isExternal,
     finalUrl: res.url,
   };
+
+  if (isExternal && res.status === 403) {
+    const host = getHost(normalized);
+    const isBotProtected = EXTERNAL_BOT_PROTECTION_HOSTS.has(host);
+    const cloudflareChallenge = Boolean(res.headers.get("cf-mitigated"));
+    if (isBotProtected || cloudflareChallenge) {
+      const skipped = {
+        ...result,
+        ok: true,
+        skipped: true,
+      };
+      linkCache.set(normalized, skipped);
+      return skipped;
+    }
+  }
+
   linkCache.set(normalized, result);
   return result;
 }
@@ -283,12 +345,7 @@ async function crawl() {
     $("a[href]").each((_, el) => {
       let href = $(el).attr("href");
       if (!href) return;
-      if (
-        href.startsWith("mailto:") ||
-        href.startsWith("tel:") ||
-        href.startsWith("#")
-      )
-        return;
+      if (shouldSkipLink($, el, href)) return;
 
       let absolute;
       try {
@@ -544,12 +601,7 @@ async function main() {
       $("a[href]").each((_, el) => {
         let href = $(el).attr("href");
         if (!href) return;
-        if (
-          href.startsWith("mailto:") ||
-          href.startsWith("tel:") ||
-          href.startsWith("#")
-        )
-          return;
+        if (shouldSkipLink($, el, href)) return;
 
         let absolute;
         try {

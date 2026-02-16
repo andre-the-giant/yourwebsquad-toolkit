@@ -593,6 +593,37 @@ async function updateMenu({ locale, navPlacement, label, href }) {
   return { path: menuPath, updated: true };
 }
 
+async function warnIfHeaderLocaleSwitchIsNotSegmentAware() {
+  const candidates = [
+    path.join(process.cwd(), "src", "components", "layout", "Header.astro"),
+    path.join(process.cwd(), "src", "components", "Header.astro"),
+  ];
+
+  for (const candidate of candidates) {
+    let raw;
+    try {
+      raw = await fs.readFile(candidate, "utf8");
+    } catch (err) {
+      if (err?.code === "ENOENT") continue;
+      throw err;
+    }
+
+    if (!raw.includes("LocaleSwitch")) return;
+    if (raw.includes("mapSegmentToLocale(")) return;
+
+    console.log(
+      chalk.yellow(
+        [
+          `Warning: ${candidate} uses LocaleSwitch but does not map localized segment values.`,
+          "Language switching can break on segment routes.",
+          "Add @toolkit/segments createSegmentHelpers + mapSegmentToLocale in Header.astro.",
+        ].join(" "),
+      ),
+    );
+    return;
+  }
+}
+
 async function promptConfig(localeConfig) {
   const { locales, defaultLocale } = localeConfig;
   const questions = [
@@ -757,6 +788,9 @@ async function main() {
     locales,
     defaultLocale,
   });
+  if (routeType === "segment" && locales.length > 1) {
+    await warnIfHeaderLocaleSwitchIsNotSegmentAware();
+  }
   logSuccess("New page created.");
   const frHref = hrefByLocale.fr || null;
   const enHref = hrefByLocale.en || null;

@@ -38,7 +38,9 @@ let lhManifest =
   safeReadJson(path.join(".lighthouseci", "manifest.json")) ||
   null;
 if (!Array.isArray(lhManifest) || !lhManifest.length) {
-  lhManifest = loadLighthouseRunsFromReportDir(path.join("reports", "lighthouse"));
+  lhManifest = loadLighthouseRunsFromReportDir(
+    path.join("reports", "lighthouse"),
+  );
 }
 const lhSummary = {};
 for (const cat of lhCategories) {
@@ -60,11 +62,7 @@ function loadLighthouseRunsFromReportDir(dir) {
       }
     }
     runs.push({
-      url:
-        data.finalDisplayedUrl ||
-        data.finalUrl ||
-        data.requestedUrl ||
-        file,
+      url: data.finalDisplayedUrl || data.finalUrl || data.requestedUrl || file,
       summary,
     });
   }

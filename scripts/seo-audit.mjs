@@ -200,7 +200,10 @@ function runSeoChecks(url, html) {
   }
 
   const desc =
-    root.querySelector('meta[name="description"]')?.getAttribute("content")?.trim() || "";
+    root
+      .querySelector('meta[name="description"]')
+      ?.getAttribute("content")
+      ?.trim() || "";
   if (!desc) {
     issues.push(
       makeIssue(
@@ -221,7 +224,8 @@ function runSeoChecks(url, html) {
     );
   }
 
-  const viewport = root.querySelector('meta[name="viewport"]')?.getAttribute("content") || "";
+  const viewport =
+    root.querySelector('meta[name="viewport"]')?.getAttribute("content") || "";
   if (!viewport) {
     issues.push(
       makeIssue(
@@ -233,7 +237,9 @@ function runSeoChecks(url, html) {
     );
   }
 
-  const canonical = root.querySelector('link[rel="canonical"]')?.getAttribute("href");
+  const canonical = root
+    .querySelector('link[rel="canonical"]')
+    ?.getAttribute("href");
   if (!canonical) {
     issues.push(
       makeIssue(url, "warn", "canonical-missing", "Canonical link is missing."),
@@ -320,9 +326,15 @@ function runSeoChecks(url, html) {
     pagePath.startsWith("/pricing");
 
   if (isMarketingPage) {
-    const ogTitle = root.querySelector('meta[property="og:title"]')?.getAttribute("content");
-    const ogDesc = root.querySelector('meta[property="og:description"]')?.getAttribute("content");
-    const ogImage = root.querySelector('meta[property="og:image"]')?.getAttribute("content");
+    const ogTitle = root
+      .querySelector('meta[property="og:title"]')
+      ?.getAttribute("content");
+    const ogDesc = root
+      .querySelector('meta[property="og:description"]')
+      ?.getAttribute("content");
+    const ogImage = root
+      .querySelector('meta[property="og:image"]')
+      ?.getAttribute("content");
 
     if (!ogTitle) {
       issues.push(
@@ -356,7 +368,9 @@ function runSeoChecks(url, html) {
     }
   }
 
-  const jsonLdScripts = root.querySelectorAll('script[type="application/ld+json"]');
+  const jsonLdScripts = root.querySelectorAll(
+    'script[type="application/ld+json"]',
+  );
   if (jsonLdScripts.length === 0 && isMarketingPage) {
     issues.push(
       makeIssue(
@@ -368,7 +382,8 @@ function runSeoChecks(url, html) {
     );
   }
 
-  const robotsMeta = root.querySelector('meta[name="robots"]')?.getAttribute("content") || "";
+  const robotsMeta =
+    root.querySelector('meta[name="robots"]')?.getAttribute("content") || "";
   if (robotsMeta.toLowerCase().includes("noindex")) {
     issues.push(
       makeIssue(

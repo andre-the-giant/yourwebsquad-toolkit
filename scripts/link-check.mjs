@@ -20,8 +20,10 @@ const CHECK_EXTERNAL = args.skipExternal
   : process.env.CHECK_EXTERNAL_LINKS !== "0";
 const QUIET_MODE = Boolean(args.quiet || process.env.LINKS_QUIET === "1");
 const EXTERNAL_BOT_PROTECTION_HOSTS = new Set(
-  (process.env.LINK_CHECK_BOT_PROTECTION_HOSTS ||
-    "homestars.com,www.homestars.com")
+  (
+    process.env.LINK_CHECK_BOT_PROTECTION_HOSTS ||
+    "homestars.com,www.homestars.com"
+  )
     .split(",")
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean),

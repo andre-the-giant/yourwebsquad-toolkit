@@ -6,10 +6,19 @@ import Validator from "@adobe/structured-data-validator";
 import WebAutoExtractor from "@marbec/web-auto-extractor";
 
 const argv = process.argv.slice(2);
-const targetDir = path.resolve(process.cwd(), firstPositionalArg(argv) || "build");
+const targetDir = path.resolve(
+  process.cwd(),
+  firstPositionalArg(argv) || "build",
+);
 const urlsFile = resolveUrlsFileArg(argv);
-const schemaUrl = process.env.SCHEMA_ORG_URL || "https://schema.org/version/latest/schemaorg-all-https.jsonld";
-const schemaCachePath = path.join(process.cwd(), ".yws-cache", "schemaorg-all-https.jsonld");
+const schemaUrl =
+  process.env.SCHEMA_ORG_URL ||
+  "https://schema.org/version/latest/schemaorg-all-https.jsonld";
+const schemaCachePath = path.join(
+  process.cwd(),
+  ".yws-cache",
+  "schemaorg-all-https.jsonld",
+);
 const schemaFile = resolveSchemaFileArg(argv);
 
 function firstPositionalArg(args) {
@@ -104,7 +113,7 @@ function normalizeIssue(issue) {
     severity: String(issue?.severity || "ERROR").toUpperCase(),
     path: issue?.path,
     fieldNames: Array.isArray(issue?.fieldNames) ? issue.fieldNames : [],
-    location: issue?.location
+    location: issue?.location,
   };
 }
 
@@ -183,7 +192,7 @@ async function main() {
   const validator = new Validator(schemaOrgJson);
   const extractor = new WebAutoExtractor({
     addLocation: true,
-    embedSource: ["rdfa", "microdata"]
+    embedSource: ["rdfa", "microdata"],
   });
 
   const issues = [];
@@ -207,14 +216,14 @@ async function main() {
         issueMessage: `Validator crashed: ${error?.message || error}`,
         fieldNames: [],
         path: [],
-        location: null
+        location: null,
       });
       continue;
     }
 
     const fileIssues = normalizeIssues(validationResult).map((issue) => ({
       ...issue,
-      file
+      file,
     }));
     issues.push(...fileIssues);
   }
@@ -227,9 +236,7 @@ async function main() {
 
     console.error(
       `❌ JSON-LD validation found ${filesWithErrors} page(s) with errors` +
-        (filesWithWarnings
-          ? ` and ${filesWithWarnings} with warnings.`
-          : "."),
+        (filesWithWarnings ? ` and ${filesWithWarnings} with warnings.` : "."),
     );
 
     issues.forEach((issue) => {

@@ -15,8 +15,11 @@ const args = parseArgs(process.argv.slice(2));
 const BASE_URL = args.base ?? DEFAULT_BASE_URL;
 const REPORT_DIR = args.reportDir ?? DEFAULT_REPORT_DIR;
 const URLS_FILE = args.urlsFile;
-const CONFIG_PATH = args.configPath || path.join(process.cwd(), "lighthouserc.cjs");
-const QUIET_MODE = Boolean(args.quiet || process.env.LHCI_LOG_LEVEL === "silent");
+const CONFIG_PATH =
+  args.configPath || path.join(process.cwd(), "lighthouserc.cjs");
+const QUIET_MODE = Boolean(
+  args.quiet || process.env.LHCI_LOG_LEVEL === "silent",
+);
 
 function parseArgs(argv) {
   const opts = {};
@@ -79,7 +82,7 @@ function runCommand(cmd, cmdArgs) {
     const child = spawn(cmd, cmdArgs, {
       shell: true,
       stdio: QUIET_MODE ? ["ignore", "pipe", "pipe"] : "inherit",
-      env: process.env
+      env: process.env,
     });
 
     let out = "";
@@ -163,7 +166,7 @@ function evaluateAssertions(jsonFiles, thresholds) {
           url,
           category,
           score,
-          minScore
+          minScore,
         });
       }
     }
@@ -173,9 +176,7 @@ function evaluateAssertions(jsonFiles, thresholds) {
 }
 
 async function main() {
-  const urls = URLS_FILE
-    ? loadUrlsFromFile(URLS_FILE, BASE_URL)
-    : [BASE_URL];
+  const urls = URLS_FILE ? loadUrlsFromFile(URLS_FILE, BASE_URL) : [BASE_URL];
   if (!urls.length) {
     console.error("No URLs provided for lighthouse.");
     process.exit(1);
@@ -199,7 +200,7 @@ async function main() {
       "--output=html",
       `--output-path=${outBase}`,
       "--quiet",
-      "--chrome-flags=\"--headless --no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage\""
+      '--chrome-flags="--headless --no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage"',
     ];
 
     const result = await runCommand("npx", cmdArgs);
@@ -218,7 +219,10 @@ async function main() {
     .map((f) => path.join(REPORT_DIR, f));
 
   const thresholds = loadAssertionThresholds(CONFIG_PATH);
-  const { assertionFailures, failures } = evaluateAssertions(jsonFiles, thresholds);
+  const { assertionFailures, failures } = evaluateAssertions(
+    jsonFiles,
+    thresholds,
+  );
 
   const stats = {
     urlsTested: urls.length,
@@ -226,7 +230,7 @@ async function main() {
     assertionFailures,
     runFailures: runFailures.length,
     failures,
-    runFailureUrls: runFailures.map((entry) => entry.url)
+    runFailureUrls: runFailures.map((entry) => entry.url),
   };
   fs.writeFileSync(
     path.join(REPORT_DIR, "stats.json"),
@@ -245,7 +249,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`Unexpected error in lighthouse-audit: ${error?.message || error}`);
+  console.error(
+    `Unexpected error in lighthouse-audit: ${error?.message || error}`,
+  );
   process.exit(1);
 });
-

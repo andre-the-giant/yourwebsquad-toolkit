@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+reports
+build
+.astro
+.lighthouseci
+lhci-report
+pa11y-report
+seo-report
+*.log

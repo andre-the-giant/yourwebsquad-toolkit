@@ -2,7 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { load as loadHtml } from "cheerio";
+import { parse } from "node-html-parser";
 
 const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
 const DEFAULT_REPORT_DIR =
@@ -89,17 +89,17 @@ async function crawl() {
     if (!contentType.includes("text/html")) continue;
 
     const html = await res.text();
-    const $ = loadHtml(html);
+    const root = parse(html);
 
-    $("a[href]").each((_, el) => {
-      let href = $(el).attr("href");
-      if (!href) return;
+    for (const anchor of root.querySelectorAll("a[href]")) {
+      const href = anchor.getAttribute("href");
+      if (!href) continue;
       if (
         href.startsWith("mailto:") ||
         href.startsWith("tel:") ||
         href.startsWith("#")
       )
-        return;
+        continue;
 
       let absolute;
       try {
@@ -107,10 +107,10 @@ async function crawl() {
           ? href
           : new URL(href, url).toString();
       } catch {
-        return;
+        continue;
       }
 
-      if (!isInternal(absolute)) return;
+      if (!isInternal(absolute)) continue;
       const normalized = normalizeUrl(absolute);
       const fromPage = normalizeUrl(url);
 
@@ -122,7 +122,7 @@ async function crawl() {
       if (!visited.has(normalized) && !toVisit.has(normalized)) {
         toVisit.add(normalized);
       }
-    });
+    }
   }
 
   return Array.from(visited).sort();
@@ -132,13 +132,13 @@ function makeIssue(pageUrl, severity, code, message, extra = {}) {
   return { pageUrl, severity, code, message, ...extra };
 }
 
-function checkHeadingOrder($) {
+function checkHeadingOrder(root) {
   const headings = [];
-  $("h1, h2, h3, h4, h5, h6").each((_, el) => {
-    const tag = el.tagName.toLowerCase();
-    const level = parseInt(tag.replace("h", ""), 10);
+  for (const el of root.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+    const tag = (el.rawTagName || "").toLowerCase();
+    const level = Number.parseInt(tag.replace("h", ""), 10);
     headings.push(level);
-  });
+  }
 
   const jumps = [];
   for (let i = 1; i < headings.length; i++) {
@@ -166,12 +166,12 @@ async function checkUrlStatus(url) {
 }
 
 function runSeoChecks(url, html) {
-  const $ = loadHtml(html);
+  const root = parse(html);
   const issues = [];
 
   const pagePath = new URL(url).pathname;
 
-  const htmlLang = $("html").attr("lang");
+  const htmlLang = root.querySelector("html")?.getAttribute("lang");
   if (!htmlLang) {
     issues.push(
       makeIssue(
@@ -183,7 +183,7 @@ function runSeoChecks(url, html) {
     );
   }
 
-  const title = $("title").text().trim();
+  const title = (root.querySelector("title")?.text || "").trim();
   if (!title) {
     issues.push(
       makeIssue(url, "error", "title-missing", "Page <title> is missing."),
@@ -199,7 +199,8 @@ function runSeoChecks(url, html) {
     );
   }
 
-  const desc = $('meta[name="description"]').attr("content")?.trim() || "";
+  const desc =
+    root.querySelector('meta[name="description"]')?.getAttribute("content")?.trim() || "";
   if (!desc) {
     issues.push(
       makeIssue(
@@ -220,7 +221,7 @@ function runSeoChecks(url, html) {
     );
   }
 
-  const viewport = $('meta[name="viewport"]').attr("content") || "";
+  const viewport = root.querySelector('meta[name="viewport"]')?.getAttribute("content") || "";
   if (!viewport) {
     issues.push(
       makeIssue(
@@ -232,7 +233,7 @@ function runSeoChecks(url, html) {
     );
   }
 
-  const canonical = $('link[rel="canonical"]').attr("href");
+  const canonical = root.querySelector('link[rel="canonical"]')?.getAttribute("href");
   if (!canonical) {
     issues.push(
       makeIssue(url, "warn", "canonical-missing", "Canonical link is missing."),
@@ -268,7 +269,7 @@ function runSeoChecks(url, html) {
     }
   }
 
-  const h1s = $("h1");
+  const h1s = root.querySelectorAll("h1");
   if (h1s.length === 0) {
     issues.push(
       makeIssue(url, "error", "h1-missing", "No <h1> found on the page."),
@@ -284,7 +285,7 @@ function runSeoChecks(url, html) {
     );
   }
 
-  const jumps = checkHeadingOrder($);
+  const jumps = checkHeadingOrder(root);
   if (jumps.length > 0) {
     issues.push(
       makeIssue(
@@ -296,13 +297,11 @@ function runSeoChecks(url, html) {
     );
   }
 
-  const imagesMissingAlt = $("img").filter((_, el) => {
-    const hasAltAttr = Object.prototype.hasOwnProperty.call(
-      el.attribs || {},
-      "alt",
-    );
-    return !hasAltAttr;
-  }).length;
+  const imagesMissingAlt = root
+    .querySelectorAll("img")
+    .filter(
+      (el) => !Object.prototype.hasOwnProperty.call(el.attributes || {}, "alt"),
+    ).length;
 
   if (imagesMissingAlt > 0) {
     issues.push(
@@ -321,9 +320,9 @@ function runSeoChecks(url, html) {
     pagePath.startsWith("/pricing");
 
   if (isMarketingPage) {
-    const ogTitle = $('meta[property="og:title"]').attr("content");
-    const ogDesc = $('meta[property="og:description"]').attr("content");
-    const ogImage = $('meta[property="og:image"]').attr("content");
+    const ogTitle = root.querySelector('meta[property="og:title"]')?.getAttribute("content");
+    const ogDesc = root.querySelector('meta[property="og:description"]')?.getAttribute("content");
+    const ogImage = root.querySelector('meta[property="og:image"]')?.getAttribute("content");
 
     if (!ogTitle) {
       issues.push(
@@ -357,7 +356,7 @@ function runSeoChecks(url, html) {
     }
   }
 
-  const jsonLdScripts = $('script[type="application/ld+json"]');
+  const jsonLdScripts = root.querySelectorAll('script[type="application/ld+json"]');
   if (jsonLdScripts.length === 0 && isMarketingPage) {
     issues.push(
       makeIssue(
@@ -369,7 +368,7 @@ function runSeoChecks(url, html) {
     );
   }
 
-  const robotsMeta = $('meta[name="robots"]').attr("content") || "";
+  const robotsMeta = root.querySelector('meta[name="robots"]')?.getAttribute("content") || "";
   if (robotsMeta.toLowerCase().includes("noindex")) {
     issues.push(
       makeIssue(

@@ -2,25 +2,35 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
+import Validator from "@adobe/structured-data-validator";
+import WebAutoExtractor from "@marbec/web-auto-extractor";
 
-const require = createRequire(import.meta.url);
-const { structuredDataTestHtml } = require("structured-data-testing-tool");
-const {
-  Google,
-  Twitter,
-  Facebook,
-} = require("structured-data-testing-tool/presets");
+const argv = process.argv.slice(2);
+const targetDir = path.resolve(process.cwd(), firstPositionalArg(argv) || "build");
+const urlsFile = resolveUrlsFileArg(argv);
+const schemaUrl = process.env.SCHEMA_ORG_URL || "https://schema.org/version/latest/schemaorg-all-https.jsonld";
+const schemaCachePath = path.join(process.cwd(), ".yws-cache", "schemaorg-all-https.jsonld");
+const schemaFile = resolveSchemaFileArg(argv);
 
-const args = process.argv.slice(2);
-const targetDir = path.resolve(
-  process.cwd(),
-  args.find((arg) => !arg.startsWith("--")) || "build",
-);
-const urlsFile =
-  args.find((arg) => arg.startsWith("--urls-file="))?.split("=")[1] ||
-  path.join(process.cwd(), "reports", "urls.json");
-const presets = [Google, Twitter, Facebook].filter(Boolean);
+function firstPositionalArg(args) {
+  return args.find((arg) => !arg.startsWith("--"));
+}
+
+function resolveUrlsFileArg(args) {
+  const equals = args.find((arg) => arg.startsWith("--urls-file="));
+  if (equals) return equals.split("=")[1];
+  const flagIndex = args.indexOf("--urls-file");
+  if (flagIndex > -1 && args[flagIndex + 1]) return args[flagIndex + 1];
+  return path.join(process.cwd(), "reports", "urls.json");
+}
+
+function resolveSchemaFileArg(args) {
+  const equals = args.find((arg) => arg.startsWith("--schema-file="));
+  if (equals) return equals.split("=")[1];
+  const flagIndex = args.indexOf("--schema-file");
+  if (flagIndex > -1 && args[flagIndex + 1]) return args[flagIndex + 1];
+  return null;
+}
 
 function normalizePath(p) {
   return p.replace(/\/+$/, "");
@@ -70,53 +80,89 @@ function readHtmlFiles(dir) {
   });
 }
 
-function formatTest(test) {
-  const pathLabel = test.test || test.description || "Unknown test";
-  const message =
-    test?.error?.message ||
-    test?.message ||
-    test?.error ||
-    test?.expect ||
-    "Validation failed";
-  const groups = Array.isArray(test?.groups)
-    ? test.groups.join(" > ")
-    : test.group || "";
-  return `${groups ? `${groups}: ` : ""}${pathLabel} — ${message}`;
+function formatPath(pathValue) {
+  if (!Array.isArray(pathValue) || pathValue.length === 0) return "";
+  return pathValue
+    .map((segment) => {
+      if (typeof segment === "string") return segment;
+      if (segment && typeof segment === "object") {
+        const type = segment.type || segment.key || "node";
+        const index =
+          Number.isInteger(segment.index) && segment.index >= 0
+            ? `[${segment.index}]`
+            : "";
+        return `${type}${index}`;
+      }
+      return String(segment);
+    })
+    .join(" > ");
 }
 
-async function validateFile(file, issues) {
-  const html = fs.readFileSync(file, "utf8");
-  let result;
+function normalizeIssue(issue) {
+  return {
+    issueMessage: issue?.issueMessage || issue?.message || "Validation issue",
+    severity: String(issue?.severity || "ERROR").toUpperCase(),
+    path: issue?.path,
+    fieldNames: Array.isArray(issue?.fieldNames) ? issue.fieldNames : [],
+    location: issue?.location
+  };
+}
 
+function normalizeIssues(result) {
+  if (Array.isArray(result)) return result.map(normalizeIssue);
+  if (Array.isArray(result?.issues)) return result.issues.map(normalizeIssue);
+  return [];
+}
+
+async function fetchSchemaJson(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    result = await structuredDataTestHtml(html, {
-      url: `file://${file}`,
-      presets,
-    });
-  } catch (err) {
-    if (err?.type === "VALIDATION_FAILED" && err.res) {
-      result = err.res;
-    } else {
-      issues.push({
-        file,
-        level: "error",
-        message: `Validator crashed: ${err?.message || err}`,
-      });
-      return;
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} while fetching schema`);
     }
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function ensureParentDir(filePath) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function readJson(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function writeJson(filePath, value) {
+  ensureParentDir(filePath);
+  fs.writeFileSync(filePath, JSON.stringify(value), "utf8");
+}
+
+async function loadSchemaOrgJson() {
+  if (schemaFile) {
+    if (!fs.existsSync(schemaFile)) {
+      throw new Error(`Schema file not found: ${schemaFile}`);
+    }
+    return readJson(schemaFile);
   }
 
-  const failed = Array.isArray(result?.failed) ? result.failed : [];
-  const warnings = Array.isArray(result?.warnings) ? result.warnings : [];
-
-  if (!failed.length && !warnings.length) return;
-
-  issues.push({
-    file,
-    level: failed.length ? "error" : "warning",
-    errors: failed.map(formatTest),
-    warnings: warnings.map(formatTest),
-  });
+  try {
+    const schema = await fetchSchemaJson(schemaUrl);
+    writeJson(schemaCachePath, schema);
+    return schema;
+  } catch (error) {
+    if (fs.existsSync(schemaCachePath)) {
+      console.warn(
+        `⚠️ Could not fetch schema.org JSON-LD (${error?.message || error}). Using cached schema: ${schemaCachePath}`,
+      );
+      return readJson(schemaCachePath);
+    }
+    throw error;
+  }
 }
 
 async function main() {
@@ -133,6 +179,13 @@ async function main() {
     return;
   }
 
+  const schemaOrgJson = await loadSchemaOrgJson();
+  const validator = new Validator(schemaOrgJson);
+  const extractor = new WebAutoExtractor({
+    addLocation: true,
+    embedSource: ["rdfa", "microdata"]
+  });
+
   const issues = [];
   for (const file of htmlFiles) {
     if (
@@ -141,38 +194,61 @@ async function main() {
     ) {
       continue;
     }
-    await validateFile(file, issues);
+
+    const html = fs.readFileSync(file, "utf8");
+    let validationResult;
+    try {
+      const extracted = extractor.parse(html);
+      validationResult = await validator.validate(extracted);
+    } catch (error) {
+      issues.push({
+        file,
+        severity: "ERROR",
+        issueMessage: `Validator crashed: ${error?.message || error}`,
+        fieldNames: [],
+        path: [],
+        location: null
+      });
+      continue;
+    }
+
+    const fileIssues = normalizeIssues(validationResult).map((issue) => ({
+      ...issue,
+      file
+    }));
+    issues.push(...fileIssues);
   }
 
-  if (issues.length) {
-    const withErrors = issues.filter(
-      (i) => i.level === "error" && i.errors?.length,
-    );
-    const withWarnings = issues.filter((i) => i.warnings?.length);
+  if (issues.length > 0) {
+    const errorIssues = issues.filter((i) => i.severity === "ERROR");
+    const warningIssues = issues.filter((i) => i.severity === "WARNING");
+    const filesWithErrors = new Set(errorIssues.map((i) => i.file)).size;
+    const filesWithWarnings = new Set(warningIssues.map((i) => i.file)).size;
 
     console.error(
-      `❌ JSON-LD validation found ${withErrors.length} page(s) with errors` +
-        (withWarnings.length
-          ? ` and ${withWarnings.length} with warnings.`
+      `❌ JSON-LD validation found ${filesWithErrors} page(s) with errors` +
+        (filesWithWarnings
+          ? ` and ${filesWithWarnings} with warnings.`
           : "."),
     );
 
     issues.forEach((issue) => {
-      const errors = issue.errors || [];
-      const warnings = issue.warnings || [];
       console.error(`\n🔗 ${issue.file}`);
-      if (errors.length) {
-        errors.forEach((err) => console.error(`  ✖ ${err}`));
+      const prefix = issue.severity === "WARNING" ? "⚠️" : "✖";
+      console.error(`  ${prefix} ${issue.issueMessage}`);
+      if (issue.fieldNames?.length) {
+        console.error(`    fields: ${issue.fieldNames.join(", ")}`);
       }
-      if (warnings.length) {
-        warnings.forEach((warn) => console.error(`  ⚠️ ${warn}`));
+      const pathLabel = formatPath(issue.path);
+      if (pathLabel) {
+        console.error(`    path: ${pathLabel}`);
       }
-      if (issue.message && !errors.length && !warnings.length) {
-        console.error(`  ✖ ${issue.message}`);
+      if (issue.location) {
+        console.error(`    location: ${issue.location}`);
       }
     });
 
-    if (withErrors.length) {
+    if (errorIssues.length) {
       process.exit(1);
     }
   } else {

@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import inquirer from "inquirer";
 import waitOn from "wait-on";
-import { load as loadHtml } from "cheerio";
+import { parse } from "node-html-parser";
 
 function npmArgvIncludes(flag) {
   try {
@@ -150,7 +150,11 @@ function summarizeLinks(reportDir) {
   return { broken, skipped };
 }
 
-function summarizeLighthouseAssertions(logPath) {
+function summarizeLighthouseAssertions(reportDir, logPath) {
+  const stats = readJsonIfExists(path.join(reportDir, "stats.json"));
+  if (Number.isFinite(stats?.assertionFailures)) {
+    return Number(stats.assertionFailures);
+  }
   if (!logPath || !fs.existsSync(logPath)) return null;
   const txt = fs.readFileSync(logPath, "utf8");
   const match = txt.match(/found:\s*(\d+)/i);
@@ -439,23 +443,22 @@ function getUrlsFromSitemap(baseUrl) {
   }
 
   const xml = fs.readFileSync(sitemapPath, "utf8");
-  const $ = loadHtml(xml, { xmlMode: true });
   const urls = new Set();
-
-  $("loc").each((_, el) => {
-    const loc = $(el).text().trim();
-    if (!loc) return;
+  const matches = xml.matchAll(/<loc>([\s\S]*?)<\/loc>/gi);
+  for (const match of matches) {
+    const loc = (match[1] || "").replaceAll("&amp;", "&").trim();
+    if (!loc) continue;
     let pathname;
     try {
       pathname = new URL(loc).pathname;
     } catch {
-      return;
+      continue;
     }
-    if (!pathname.startsWith("/en") && !pathname.startsWith("/fr")) return;
-    if (!fileExistsForPath(pathname)) return;
+    if (!pathname.startsWith("/en") && !pathname.startsWith("/fr")) continue;
+    if (!fileExistsForPath(pathname)) continue;
     const target = new URL(pathname, baseUrl).toString();
     urls.add(normalizeUrl(target));
-  });
+  }
 
   return Array.from(urls).sort();
 }
@@ -482,31 +485,31 @@ async function crawlAllPages(startUrl) {
     if (!contentType.includes("text/html")) continue;
 
     const html = await res.text();
-    const $ = loadHtml(html);
+    const root = parse(html);
 
-    $("a[href]").each((_, el) => {
-      const href = $(el).attr("href");
+    for (const anchor of root.querySelectorAll("a[href]")) {
+      const href = anchor.getAttribute("href");
       if (
         !href ||
         href.startsWith("#") ||
         href.startsWith("mailto:") ||
         href.startsWith("tel:")
       )
-        return;
+        continue;
       let absolute;
       try {
         absolute = href.startsWith("http")
           ? href
           : new URL(href, url).toString();
       } catch {
-        return;
+        continue;
       }
       const normalized = normalizeUrl(absolute);
-      if (!normalized.startsWith(base)) return;
+      if (!normalized.startsWith(base)) continue;
       if (!visited.has(normalized) && !toVisit.has(normalized)) {
         toVisit.add(normalized);
       }
-    });
+    }
   }
 
   return Array.from(visited).sort();
@@ -824,57 +827,36 @@ async function main() {
       }
     }
 
-    let lighthouseStarted = 0;
-    const lighthouseTotal = urls.length;
-    if (selectedChecks.lighthouse && QUIET_MODE) {
-      console.log(
-        "🔦 Lighthouse: will log each page as it starts; progress updates inline.",
-      );
-    }
+    const lighthouseReportDir = path.join(REPORT_ROOT, "lighthouse");
 
     await runStep(
       "Lighthouse",
       async () => {
         const result = await runCommand(
-          "npx",
+          "node",
           [
-            "lhci",
-            "autorun",
+            toolkitScriptPath("lighthouse-audit.mjs"),
+            "--base",
+            BASE_URL,
+            "--urls-file",
+            urlsFile,
+            "--report-dir",
+            lighthouseReportDir,
             "--config",
-            "lighthouserc.cjs",
-            ...(QUIET_MODE ? ["--quiet"] : []),
+            path.join(process.cwd(), "lighthouserc.cjs"),
+            QUIET_MODE ? "--quiet" : "",
           ],
           {
             label: "Lighthouse",
             logName: "lighthouse",
             allowFailure: true,
             forceLog: true,
-            env: {
-              ...process.env,
-              LHCI_URLS_FILE: urlsFile,
-              LHCI_REPORT_DIR: path.join(REPORT_ROOT, "lighthouse"),
-              LHCI_RUNS: "1",
-              ...(QUIET_MODE ? { LHCI_LOG_LEVEL: "silent" } : {}),
-            },
-            onLine: QUIET_MODE
-              ? ({ line }) => {
-                  const trimmed = line.trim();
-                  if (!trimmed) return;
-                  if (/^HTTP/i.test(trimmed)) return;
-                  if (trimmed.startsWith("Running Lighthouse")) {
-                    lighthouseStarted += 1;
-                    console.log(trimmed);
-                    const progress = `Lighthouse progress: ${lighthouseStarted}/${lighthouseTotal}`;
-                    process.stdout.write(`\r${progress}`);
-                  }
-                }
-              : undefined,
           },
         );
-        if (QUIET_MODE && lighthouseStarted > 0) {
-          process.stdout.write("\n");
-        }
-        const assertionCount = summarizeLighthouseAssertions(result?.logPath);
+        const assertionCount = summarizeLighthouseAssertions(
+          lighthouseReportDir,
+          result?.logPath,
+        );
         const summary =
           assertionCount === null
             ? `Lighthouse completed${result?.logPath ? ` (log: ${result.logPath})` : ""}`

@@ -17,23 +17,58 @@ function formatScore(score) {
 }
 
 // SEO
-const seoIssues = safeReadJson(path.join("seo-report", "issues.json")) || [];
+const seoIssues =
+  safeReadJson(path.join("seo-report", "issues.json")) ||
+  safeReadJson(path.join("reports", "seo", "issues.json")) ||
+  [];
 const seoPages = new Set(seoIssues.map((i) => i.pageUrl));
 const seoErrorCount = seoIssues.filter((i) => i.severity === "error").length;
 const seoWarnCount = seoIssues.filter((i) => i.severity === "warn").length;
 
 // Pa11y
-const pa11yStats = safeReadJson(path.join("pa11y-report", "stats.json"));
+const pa11yStats =
+  safeReadJson(path.join("pa11y-report", "stats.json")) ||
+  safeReadJson(path.join("reports", "pa11y", "stats.json"));
+
+const lhCategories = ["performance", "accessibility", "best-practices", "seo"];
 
 // Lighthouse
 let lhManifest =
   safeReadJson(path.join("lhci-report", "manifest.json")) ||
   safeReadJson(path.join(".lighthouseci", "manifest.json")) ||
-  [];
-const lhCategories = ["performance", "accessibility", "best-practices", "seo"];
+  null;
+if (!Array.isArray(lhManifest) || !lhManifest.length) {
+  lhManifest = loadLighthouseRunsFromReportDir(path.join("reports", "lighthouse"));
+}
 const lhSummary = {};
 for (const cat of lhCategories) {
   lhSummary[cat] = { minScore: null, minUrl: null };
+}
+
+function loadLighthouseRunsFromReportDir(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const files = fs.readdirSync(dir).filter((file) => file.endsWith(".json"));
+  const runs = [];
+  for (const file of files) {
+    const data = safeReadJson(path.join(dir, file));
+    if (!data?.categories) continue;
+    const summary = {};
+    for (const key of lhCategories) {
+      const score = data.categories?.[key]?.score;
+      if (typeof score === "number") {
+        summary[key] = score;
+      }
+    }
+    runs.push({
+      url:
+        data.finalDisplayedUrl ||
+        data.finalUrl ||
+        data.requestedUrl ||
+        file,
+      summary,
+    });
+  }
+  return runs;
 }
 for (const run of lhManifest) {
   const url = run.url;

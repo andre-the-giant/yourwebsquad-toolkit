@@ -3,7 +3,7 @@
 import pa11y from "pa11y";
 import fs from "node:fs";
 import path from "node:path";
-import { load as loadHtml } from "cheerio";
+import { parse } from "node-html-parser";
 
 const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
 const DEFAULT_REPORT_DIR =
@@ -68,17 +68,17 @@ async function crawl(startUrl) {
     if (!contentType.includes("text/html")) continue;
 
     const html = await res.text();
-    const $ = loadHtml(html);
+    const root = parse(html);
 
-    $("a[href]").each((_, el) => {
-      let href = $(el).attr("href");
-      if (!href) return;
+    for (const anchor of root.querySelectorAll("a[href]")) {
+      const href = anchor.getAttribute("href");
+      if (!href) continue;
       if (
         href.startsWith("mailto:") ||
         href.startsWith("tel:") ||
         href.startsWith("#")
       )
-        return;
+        continue;
 
       let absolute;
       try {
@@ -86,15 +86,15 @@ async function crawl(startUrl) {
           ? href
           : new URL(href, url).toString();
       } catch {
-        return;
+        continue;
       }
 
-      if (!isInternal(absolute)) return;
+      if (!isInternal(absolute)) continue;
       const normalized = normalizeUrl(absolute);
       if (!visited.has(normalized) && !toVisit.has(normalized)) {
         toVisit.add(normalized);
       }
-    });
+    }
   }
 
   return Array.from(visited).sort();

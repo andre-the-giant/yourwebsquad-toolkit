@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import waitOn from "wait-on";
-import { load as loadHtml } from "cheerio";
+import { parse } from "node-html-parser";
 
 const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
 const DEFAULT_REPORT_DIR =
@@ -141,22 +141,22 @@ function getUrlsFromSitemap(baseUrl) {
   if (!sitemapPath) return [];
   try {
     const xml = fs.readFileSync(sitemapPath, "utf8");
-    const $ = loadHtml(xml, { xmlMode: true });
     const urls = new Set();
-    $("loc").each((_, el) => {
-      const loc = $(el).text().trim();
-      if (!loc) return;
+    const matches = xml.matchAll(/<loc>([\s\S]*?)<\/loc>/gi);
+    for (const match of matches) {
+      const loc = (match[1] || "").replaceAll("&amp;", "&").trim();
+      if (!loc) continue;
       let pathname;
       try {
         pathname = new URL(loc).pathname;
       } catch {
-        return;
+        continue;
       }
-      if (!pathname.startsWith("/en") && !pathname.startsWith("/fr")) return;
-      if (!fileExistsForPath(pathname)) return;
+      if (!pathname.startsWith("/en") && !pathname.startsWith("/fr")) continue;
+      if (!fileExistsForPath(pathname)) continue;
       const target = new URL(pathname, baseUrl).toString();
       urls.add(normalizeUrl(target));
-    });
+    }
     return Array.from(urls).sort();
   } catch {
     return [];
@@ -187,22 +187,24 @@ function isIgnoredScheme(href) {
   );
 }
 
-function hasClassAncestor($, el, className) {
+function hasClassAncestor(el, className) {
   let current = el;
-  while (current && current.type === "tag") {
-    const classes = (current.attribs?.class || "").split(/\s+/).filter(Boolean);
+  while (current && current.rawTagName) {
+    const classes = (current.getAttribute?.("class") || "")
+      .split(/\s+/)
+      .filter(Boolean);
     if (classes.includes(className)) return true;
-    current = current.parent;
+    current = current.parentNode;
   }
   return false;
 }
 
-function shouldSkipLink($, el, href) {
+function shouldSkipLink(el, href) {
   if (isIgnoredScheme(href)) return true;
 
   // GoogleReviews outputs a "more-reviews" link that is hidden client-side.
   // Skip it to avoid false positives in static HTML checks.
-  if (hasClassAncestor($, el, "more-reviews")) return true;
+  if (hasClassAncestor(el, "more-reviews")) return true;
 
   return false;
 }
@@ -340,12 +342,12 @@ async function crawl() {
     if (!contentType.includes("text/html")) continue;
 
     const html = await res.text();
-    const $ = loadHtml(html);
+    const root = parse(html);
 
-    $("a[href]").each((_, el) => {
-      let href = $(el).attr("href");
-      if (!href) return;
-      if (shouldSkipLink($, el, href)) return;
+    for (const anchor of root.querySelectorAll("a[href]")) {
+      const href = anchor.getAttribute("href");
+      if (!href) continue;
+      if (shouldSkipLink(anchor, href)) continue;
 
       let absolute;
       try {
@@ -353,15 +355,15 @@ async function crawl() {
           ? href
           : new URL(href, url).toString();
       } catch {
-        return;
+        continue;
       }
 
-      if (!isInternal(absolute)) return;
+      if (!isInternal(absolute)) continue;
       const normalized = normalizeUrl(absolute);
       if (!visited.has(normalized) && !toVisit.has(normalized)) {
         toVisit.add(normalized);
       }
-    });
+    }
   }
 
   return Array.from(visited).sort();
@@ -381,13 +383,15 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
-function buildSelector($, el) {
+function buildSelector(el) {
   const parts = [];
   let current = el;
-  while (current && current.type === "tag") {
-    const name = (current.name || "").toLowerCase() || "elem";
-    const id = current.attribs?.id;
-    const classes = (current.attribs?.class || "").split(/\s+/).filter(Boolean);
+  while (current && current.rawTagName) {
+    const name = (current.rawTagName || "").toLowerCase() || "elem";
+    const id = current.getAttribute?.("id");
+    const classes = (current.getAttribute?.("class") || "")
+      .split(/\s+/)
+      .filter(Boolean);
     if (id) {
       parts.unshift(`${name}#${id}`);
       break;
@@ -397,15 +401,15 @@ function buildSelector($, el) {
       piece += `.${classes[0]}`;
     }
     const siblings =
-      current.parent?.children?.filter(
-        (child) => child.type === "tag" && child.name === current.name,
+      current.parentNode?.childNodes?.filter(
+        (child) => child.rawTagName === current.rawTagName,
       ) || [];
     if (siblings.length > 1) {
       const index = siblings.indexOf(current);
       if (index >= 0) piece += `:nth-of-type(${index + 1})`;
     }
     parts.unshift(piece);
-    current = current.parent;
+    current = current.parentNode;
   }
   return parts.length ? parts.join(" > ") : "unknown";
 }
@@ -595,13 +599,13 @@ async function main() {
       }
 
       const html = await res.text();
-      const $ = loadHtml(html);
+      const root = parse(html);
       const links = [];
 
-      $("a[href]").each((_, el) => {
-        let href = $(el).attr("href");
-        if (!href) return;
-        if (shouldSkipLink($, el, href)) return;
+      for (const anchor of root.querySelectorAll("a[href]")) {
+        const href = anchor.getAttribute("href");
+        if (!href) continue;
+        if (shouldSkipLink(anchor, href)) continue;
 
         let absolute;
         try {
@@ -609,20 +613,20 @@ async function main() {
             ? href
             : new URL(href, pageUrl).toString();
         } catch {
-          return;
+          continue;
         }
 
         const normalized = normalizeUrl(absolute);
         const isExternal = !isInternal(normalized);
-        const selector = buildSelector($, el);
-        const text = ($(el).text() || "").trim().slice(0, 120);
+        const selector = buildSelector(anchor);
+        const text = (anchor.text || "").trim().slice(0, 120);
         links.push({
           linkUrl: normalized,
           isExternal,
           selector,
           text: text || undefined,
         });
-      });
+      }
 
       const uniqueUrls = Array.from(new Set(links.map((l) => l.linkUrl)));
       const resultsByUrl = new Map();

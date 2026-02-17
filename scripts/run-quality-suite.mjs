@@ -525,9 +525,8 @@ function normalizeUrl(url) {
   try {
     const u = new URL(url);
     u.hash = "";
-    if (u.pathname.length > 1 && u.pathname.endsWith("/")) {
-      u.pathname = u.pathname.replace(/\/+$/, "");
-    }
+    // Preserve trailing slashes so discovered URLs stay canonical for
+    // projects configured with trailingSlash: "always".
     return u.toString();
   } catch {
     return url;

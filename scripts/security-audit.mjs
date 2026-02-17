@@ -83,6 +83,14 @@ function writeJson(file, value) {
   fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
 }
 
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function isLocalOrPrivateHost(hostname) {
   const host = String(hostname || "").toLowerCase();
   if (
@@ -104,6 +112,97 @@ function getObservatoryHost(baseUrl) {
     return new URL(baseUrl).hostname;
   } catch {
     return "";
+  }
+}
+
+async function collectHeaderDiagnostics(targetUrl) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(targetUrl, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+    });
+
+    const issues = [];
+    const finalUrl = res.url || targetUrl;
+    const protocol = (() => {
+      try {
+        return new URL(finalUrl).protocol;
+      } catch {
+        return "";
+      }
+    })();
+
+    const get = (name) => (res.headers.get(name) || "").trim();
+    const hsts = get("strict-transport-security");
+    const csp = get("content-security-policy");
+    const xfo = get("x-frame-options");
+    const xcto = get("x-content-type-options");
+    const referrer = get("referrer-policy");
+    const permissions = get("permissions-policy");
+
+    if (protocol === "https:" && !hsts) {
+      issues.push({
+        code: "missing-strict-transport-security",
+        message: "Missing Strict-Transport-Security header on HTTPS response.",
+      });
+    }
+    if (!csp) {
+      issues.push({
+        code: "missing-content-security-policy",
+        message: "Missing Content-Security-Policy header.",
+      });
+    } else if (/\bunsafe-inline\b/i.test(csp)) {
+      issues.push({
+        code: "csp-unsafe-inline",
+        message: "Content-Security-Policy contains 'unsafe-inline'.",
+      });
+    }
+    if (!xfo) {
+      issues.push({
+        code: "missing-x-frame-options",
+        message: "Missing X-Frame-Options header.",
+      });
+    }
+    if (!xcto || xcto.toLowerCase() !== "nosniff") {
+      issues.push({
+        code: "x-content-type-options-not-nosniff",
+        message: "X-Content-Type-Options should be set to 'nosniff'.",
+      });
+    }
+    if (!referrer) {
+      issues.push({
+        code: "missing-referrer-policy",
+        message: "Missing Referrer-Policy header.",
+      });
+    }
+    if (!permissions) {
+      issues.push({
+        code: "missing-permissions-policy",
+        message: "Missing Permissions-Policy header.",
+      });
+    }
+
+    return {
+      issues,
+      statusCode: res.status,
+      finalUrl,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      issues: [],
+      statusCode: null,
+      finalUrl: targetUrl,
+      error:
+        error?.name === "AbortError"
+          ? "timeout"
+          : String(error?.message || error),
+    };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -195,7 +294,17 @@ async function runObservatory(baseUrl) {
     testsQuantity: Number(scan.tests_quantity || 0),
     statusCode: Number(scan.status_code || 0),
     error: scan.error || null,
+    headerDiagnostics: [],
+    diagnosticsStatusCode: null,
+    diagnosticsFinalUrl: null,
+    diagnosticsError: null,
   };
+
+  const diagnostics = await collectHeaderDiagnostics(baseUrl);
+  details.headerDiagnostics = diagnostics.issues;
+  details.diagnosticsStatusCode = diagnostics.statusCode;
+  details.diagnosticsFinalUrl = diagnostics.finalUrl;
+  details.diagnosticsError = diagnostics.error;
 
   if (!response?.json) {
     return {
@@ -236,6 +345,10 @@ async function runObservatory(baseUrl) {
 }
 
 function writeMarkdownSummary(baseUrl, observatory, statsPath) {
+  const details = observatory?.details || {};
+  const diagnostics = Array.isArray(details.headerDiagnostics)
+    ? details.headerDiagnostics
+    : [];
   const lines = [
     "# Security audit report",
     "",
@@ -244,6 +357,27 @@ function writeMarkdownSummary(baseUrl, observatory, statsPath) {
     "| Tool | Status | Findings | Notes |",
     "| --- | --- | --- | --- |",
     `| observatory | ${observatory.status} | ${Number(observatory.findings || 0)} | ${observatory.message || ""} |`,
+    "",
+    "## Observatory details",
+    "",
+    `- Grade: ${details.grade ?? "-"}`,
+    `- Score: ${Number.isFinite(details.score) ? details.score : "-"}`,
+    `- Tests: ${details.testsPassed ?? 0} passed / ${details.testsFailed ?? 0} failed / ${details.testsQuantity ?? 0} total`,
+    `- HTTP status: ${details.statusCode ?? "-"}`,
+    details.detailsUrl
+      ? `- Detailed MDN view: ${details.detailsUrl}`
+      : "- Detailed MDN view: not available",
+    "",
+    "### Header diagnostics (heuristic)",
+    "",
+    diagnostics.length
+      ? diagnostics
+          .map((issue) => `- \`${issue.code}\`: ${issue.message}`)
+          .join("\n")
+      : "- No obvious header issues detected by local diagnostics.",
+    details.diagnosticsError
+      ? `- Diagnostics warning: ${details.diagnosticsError}`
+      : "",
     "",
     `Stats JSON: ${statsPath}`,
     "",
@@ -254,12 +388,35 @@ function writeMarkdownSummary(baseUrl, observatory, statsPath) {
 }
 
 function writeHtmlSummary(baseUrl, observatory, findingsTotal) {
+  const details = observatory?.details || {};
+  const diagnostics = Array.isArray(details.headerDiagnostics)
+    ? details.headerDiagnostics
+    : [];
   const rowClass =
     observatory.status === "passed"
       ? "ok"
       : observatory.status === "skipped"
         ? "skip"
         : "bad";
+
+  const detailItems = [
+    `<li><strong>Grade:</strong> ${escapeHtml(details.grade || "-")}</li>`,
+    `<li><strong>Score:</strong> ${Number.isFinite(details.score) ? details.score : "-"}</li>`,
+    `<li><strong>Tests:</strong> ${Number(details.testsPassed || 0)} passed / ${Number(details.testsFailed || 0)} failed / ${Number(details.testsQuantity || 0)} total</li>`,
+    `<li><strong>HTTP status:</strong> ${Number(details.statusCode || 0) || "-"}</li>`,
+    details.detailsUrl
+      ? `<li><strong>Detailed MDN view:</strong> <a href="${escapeHtml(details.detailsUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(details.detailsUrl)}</a></li>`
+      : "<li><strong>Detailed MDN view:</strong> not available</li>",
+  ];
+
+  const diagnosticsList = diagnostics.length
+    ? `<ul>${diagnostics
+        .map(
+          (issue) =>
+            `<li><code>${escapeHtml(issue.code)}</code>: ${escapeHtml(issue.message)}</li>`,
+        )
+        .join("")}</ul>`
+    : "<p>No obvious header issues detected by local diagnostics.</p>";
 
   const html = `<!doctype html>
 <html lang="en">
@@ -276,11 +433,18 @@ function writeHtmlSummary(baseUrl, observatory, findingsTotal) {
     tr.ok td { color: #9ef5a1; }
     tr.bad td { color: #ff8a8a; }
     tr.skip td { color: #ffd27f; }
+    .details { margin-top: 18px; padding: 14px; border: 1px solid #1f2a45; border-radius: 8px; background: #11172d; }
+    .details h2 { margin: 0 0 10px; font-size: 16px; }
+    .details h3 { margin: 12px 0 6px; font-size: 14px; }
+    .details ul { margin: 0; padding-left: 18px; }
+    .details li { margin: 4px 0; color: #e8ecf5; }
+    .details p { margin: 6px 0; color: #e8ecf5; }
+    .details a { color: #9fb3ff; }
   </style>
 </head>
 <body>
   <h1>Security audit report</h1>
-  <p class="summary">Target: ${baseUrl} · Total findings: ${findingsTotal}</p>
+  <p class="summary">Target: ${escapeHtml(baseUrl)} · Total findings: ${findingsTotal}</p>
   <table>
     <thead>
       <tr><th>Tool</th><th>Status</th><th>Findings</th><th>Notes</th></tr>
@@ -288,12 +452,19 @@ function writeHtmlSummary(baseUrl, observatory, findingsTotal) {
     <tbody>
       <tr class="${rowClass}">
         <td>observatory</td>
-        <td>${observatory.status}</td>
+        <td>${escapeHtml(observatory.status)}</td>
         <td>${Number(observatory.findings || 0)}</td>
-        <td>${observatory.message || ""}</td>
+        <td>${escapeHtml(observatory.message || "")}</td>
       </tr>
     </tbody>
   </table>
+  <section class="details">
+    <h2>Observatory details</h2>
+    <ul>${detailItems.join("")}</ul>
+    <h3>Header diagnostics (heuristic)</h3>
+    ${diagnosticsList}
+    ${details.diagnosticsError ? `<p>Diagnostics warning: ${escapeHtml(details.diagnosticsError)}</p>` : ""}
+  </section>
 </body>
 </html>`;
   const reportPath = path.join(REPORT_DIR, "report.html");

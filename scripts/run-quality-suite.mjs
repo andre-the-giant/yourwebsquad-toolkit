@@ -210,16 +210,6 @@ function getTargetChoices(envValues) {
       disabled: !developmentUrl,
     },
     {
-      key: "production",
-      name: productionUrl
-        ? `Production (${productionUrl})`
-        : "Production (missing SITE_URL in .env or env vars)",
-      baseUrl: productionUrl,
-      source: "SITE_URL",
-      usesLocalBuild: false,
-      disabled: !productionUrl,
-    },
-    {
       key: "staging",
       name: stagingUrl
         ? `Staging (${stagingUrl})`
@@ -228,6 +218,16 @@ function getTargetChoices(envValues) {
       source: "STAGING_URL",
       usesLocalBuild: false,
       disabled: !stagingUrl,
+    },
+    {
+      key: "production",
+      name: productionUrl
+        ? `Production (${productionUrl})`
+        : "Production (missing SITE_URL in .env or env vars)",
+      baseUrl: productionUrl,
+      source: "SITE_URL",
+      usesLocalBuild: false,
+      disabled: !productionUrl,
     },
   ];
 }

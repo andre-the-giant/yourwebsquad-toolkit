@@ -20,6 +20,7 @@ const COMMANDS = {
     seo: "scripts/seo-audit.mjs",
     links: "scripts/link-check.mjs",
     jsonld: "scripts/jsonld-validate.mjs",
+    security: "scripts/security-audit.mjs",
     comment: "scripts/post-quality-comment.mjs",
   },
   update: {
@@ -34,7 +35,7 @@ function printHelp() {
   console.log("  yws-toolkit format [--check] [-- <prettier args>]");
   console.log("  yws-toolkit scaffold <newpage> [-- <args>]");
   console.log(
-    "  yws-toolkit quality <run|a11y|seo|links|jsonld|comment> [-- <args>]",
+    "  yws-toolkit quality <run|a11y|seo|links|jsonld|security|comment> [-- <args>]",
   );
   console.log("  yws-toolkit update <components|toolkit> [-- <args>]");
 }

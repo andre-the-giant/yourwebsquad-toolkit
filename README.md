@@ -43,7 +43,7 @@ Available commands:
   - Cleans current workspace by removing: `.lighthouseci`, `build`, `reports`, `.astro`, `node_modules`, `package-lock.json`.
 - `yws-toolkit scaffold newpage`
   - Interactive page generator (segment and non-segment routes).
-- `yws-toolkit quality <run|a11y|seo|links|jsonld|comment> [-- <args>]`
+- `yws-toolkit quality <run|a11y|seo|links|jsonld|security|comment> [-- <args>]`
   - Runs quality checks from the current project directory.
 - `yws-toolkit update <components|toolkit> [-- <args>]`
   - Interactive tag-based dependency updater for:
@@ -62,6 +62,7 @@ Available commands:
     "test:a11y": "yws-toolkit quality a11y",
     "test:seo": "yws-toolkit quality seo",
     "test:links": "yws-toolkit quality links",
+    "test:security": "yws-toolkit quality security",
     "clean": "yws-toolkit clean",
     "newpage": "yws-toolkit scaffold newpage",
     "updatecomponents": "yws-toolkit update components",
@@ -80,6 +81,33 @@ The generator expects boilerplate-style structure in the target project (`proces
 - `src/pages/[lang]/...`
 
 It also requires a clean git working tree before making changes.
+
+## `quality run` target environments
+
+`yws-toolkit quality run` now prompts for:
+
+- `development` (default): uses `BASE_URL` or `http://localhost:4321`, builds locally, and serves `./build`.
+- `production`: uses `SITE_URL` from environment variables or `.env` / `.env.local`.
+- `staging`: uses `STAGING_URL` from environment variables or `.env` / `.env.local`.
+
+Optional flags:
+
+- `--target development|production|staging`
+- `--base <url>` (overrides target and runs against the exact URL)
+
+Note: JSON-LD validation requires local build files, so it is skipped automatically for remote targets (`production`/`staging`/`--base`).
+
+## Security checks
+
+`yws-toolkit quality security` runs:
+
+- MDN HTTP Observatory (`@mdn/mdn-http-observatory`)
+
+Generated files:
+
+- `reports/security/report.html`
+- `reports/security/SUMMARY.md`
+- `reports/security/stats.json`
 
 ## Release / versioning
 

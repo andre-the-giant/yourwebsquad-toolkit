@@ -26,13 +26,14 @@ function isFalsey(value) {
   return value === "0" || value === "false";
 }
 
-const BASE_URL = process.env.BASE_URL || "http://localhost:4321";
+const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
 const SITE_PORT = Number(process.env.SITE_PORT || 4321);
 const REPORT_PORT = Number(process.env.REPORT_PORT || 5555);
 const REPORT_ROOT = path.join(process.cwd(), "reports");
 const toolkitScriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const toolkitScriptPath = (filename) => path.join(toolkitScriptsDir, filename);
 const argv = process.argv.slice(2);
+const cliOptions = parseCliArgs(argv);
 const fullFlag = argv.includes("--full") || npmArgvIncludes("--full");
 const noQuietFlag =
   argv.includes("--no-quiet") || npmArgvIncludes("--no-quiet");
@@ -44,6 +45,31 @@ const QUIET_MODE = WANT_FULL_OUTPUT
   ? false
   : !noQuietFlag && !isFalsey(process.env.QUIET);
 const LOG_ROOT = path.join(REPORT_ROOT, "logs");
+
+function parseCliArgs(args) {
+  const options = {};
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if ((arg === "--target" || arg === "-t") && args[i + 1]) {
+      options.target = args[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("--target=")) {
+      options.target = arg.slice("--target=".length);
+      continue;
+    }
+    if ((arg === "--base" || arg === "-b") && args[i + 1]) {
+      options.base = args[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("--base=")) {
+      options.base = arg.slice("--base=".length);
+    }
+  }
+  return options;
+}
 
 function openInBrowser(url) {
   try {
@@ -70,7 +96,7 @@ function openInBrowser(url) {
 
 const TEST_CHOICES = [
   {
-    name: "All (Lighthouse + Pa11y + SEO + Link check + JSON-LD)",
+    name: "All (Lighthouse + Pa11y + SEO + Link check + JSON-LD + Security)",
     value: "all",
   },
   { name: "Lighthouse", value: "lighthouse" },
@@ -78,6 +104,7 @@ const TEST_CHOICES = [
   { name: "SEO audit", value: "seo" },
   { name: "Link check", value: "links" },
   { name: "JSON-LD validation", value: "jsonld" },
+  { name: "Security audit", value: "security" },
 ];
 
 function choiceToFlags(choice) {
@@ -89,6 +116,7 @@ function choiceToFlags(choice) {
       seo: true,
       links: true,
       jsonld: true,
+      security: true,
     };
   }
   const name = TEST_CHOICES.find((c) => c.value === choice)?.name || choice;
@@ -99,6 +127,7 @@ function choiceToFlags(choice) {
     seo: choice === "seo",
     links: choice === "links",
     jsonld: choice === "jsonld",
+    security: choice === "security",
   };
 }
 
@@ -113,6 +142,144 @@ async function promptForChecks() {
     },
   ]);
   return choiceToFlags(choice);
+}
+
+function unquoteEnvValue(value) {
+  const trimmed = String(value || "").trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function parseDotEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return {};
+  const values = {};
+  const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match) continue;
+    const [, key, rawValue] = match;
+    const cleanValue = unquoteEnvValue(rawValue.split(/\s+#/)[0]);
+    values[key] = cleanValue;
+  }
+  return values;
+}
+
+function loadProjectEnvValues() {
+  const fromDotEnv = parseDotEnvFile(path.join(process.cwd(), ".env"));
+  const fromDotEnvLocal = parseDotEnvFile(
+    path.join(process.cwd(), ".env.local"),
+  );
+  return { ...fromDotEnv, ...fromDotEnvLocal };
+}
+
+function normalizeBaseUrlInput(input) {
+  try {
+    return normalizeUrl(new URL(String(input || "").trim()).toString());
+  } catch {
+    return null;
+  }
+}
+
+function getConfiguredTargetUrl(key, envValues) {
+  const envKey = key === "production" ? "SITE_URL" : "STAGING_URL";
+  const raw = process.env[envKey] || envValues[envKey] || "";
+  return normalizeBaseUrlInput(raw);
+}
+
+function getTargetChoices(envValues) {
+  const developmentUrl = normalizeBaseUrlInput(DEFAULT_BASE_URL);
+  const productionUrl = getConfiguredTargetUrl("production", envValues);
+  const stagingUrl = getConfiguredTargetUrl("staging", envValues);
+
+  return [
+    {
+      key: "development",
+      name: developmentUrl
+        ? `Development (${developmentUrl})`
+        : `Development (invalid BASE_URL: ${DEFAULT_BASE_URL})`,
+      baseUrl: developmentUrl,
+      source: "BASE_URL",
+      usesLocalBuild: true,
+      disabled: !developmentUrl,
+    },
+    {
+      key: "production",
+      name: productionUrl
+        ? `Production (${productionUrl})`
+        : "Production (missing SITE_URL in .env or env vars)",
+      baseUrl: productionUrl,
+      source: "SITE_URL",
+      usesLocalBuild: false,
+      disabled: !productionUrl,
+    },
+    {
+      key: "staging",
+      name: stagingUrl
+        ? `Staging (${stagingUrl})`
+        : "Staging (missing STAGING_URL in .env or env vars)",
+      baseUrl: stagingUrl,
+      source: "STAGING_URL",
+      usesLocalBuild: false,
+      disabled: !stagingUrl,
+    },
+  ];
+}
+
+async function promptForTarget(envValues) {
+  if (cliOptions.base) {
+    const explicit = normalizeBaseUrlInput(cliOptions.base);
+    if (!explicit) {
+      throw new Error(`Invalid --base URL: ${cliOptions.base}`);
+    }
+    return {
+      key: "custom",
+      name: `Custom (${explicit})`,
+      baseUrl: explicit,
+      source: "--base",
+      usesLocalBuild: false,
+    };
+  }
+
+  const targets = getTargetChoices(envValues);
+  const byKey = new Map(targets.map((target) => [target.key, target]));
+  if (cliOptions.target) {
+    const requested = String(cliOptions.target).toLowerCase();
+    const selected = byKey.get(requested);
+    if (!selected) {
+      throw new Error(
+        `Unsupported --target value "${cliOptions.target}". Use development, production, or staging.`,
+      );
+    }
+    if (selected.disabled) {
+      throw new Error(
+        `Cannot use --target ${cliOptions.target}: ${selected.source} is not configured.`,
+      );
+    }
+    return selected;
+  }
+
+  const { targetKey } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "targetKey",
+      message: "Which environment should the tests run against?",
+      choices: targets.map((target) => ({
+        name: target.name,
+        value: target.key,
+        disabled: target.disabled ? "Not configured" : false,
+      })),
+      default: "development",
+    },
+  ]);
+
+  return byKey.get(targetKey);
 }
 
 function readJsonIfExists(file) {
@@ -148,6 +315,16 @@ function summarizeLinks(reportDir) {
       : 0;
   const skipped = Number(data.skippedExternal || 0);
   return { broken, skipped };
+}
+
+function summarizeSecurity(reportDir) {
+  const stats = readJsonIfExists(path.join(reportDir, "stats.json"));
+  if (!stats) return null;
+  return {
+    failed: Boolean(stats.failed),
+    findingsTotal: Number(stats.findingsTotal || 0),
+    tools: stats.tools || {},
+  };
 }
 
 function summarizeLighthouseAssertions(reportDir, logPath) {
@@ -463,6 +640,104 @@ function getUrlsFromSitemap(baseUrl) {
   return Array.from(urls).sort();
 }
 
+function extractLocValuesFromXml(xml) {
+  const values = [];
+  const matches = xml.matchAll(/<loc>([\s\S]*?)<\/loc>/gi);
+  for (const match of matches) {
+    const loc = (match[1] || "").replaceAll("&amp;", "&").trim();
+    if (loc) values.push(loc);
+  }
+  return values;
+}
+
+function isLocalePath(pathname) {
+  return pathname.startsWith("/en") || pathname.startsWith("/fr");
+}
+
+function isSameOrigin(candidate, baseUrl) {
+  try {
+    const a = new URL(candidate);
+    const b = new URL(baseUrl);
+    return a.origin === b.origin;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchText(url) {
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return res.text();
+}
+
+async function loadRemoteSitemapUrls(
+  sitemapUrl,
+  baseUrl,
+  seen = new Set(),
+  depth = 0,
+) {
+  if (seen.has(sitemapUrl) || depth > 3) return [];
+  seen.add(sitemapUrl);
+
+  let xml;
+  try {
+    xml = await fetchText(sitemapUrl);
+  } catch {
+    return [];
+  }
+  if (!xml) return [];
+
+  const locValues = extractLocValuesFromXml(xml);
+  const pageUrls = [];
+  for (const loc of locValues) {
+    let absolute;
+    try {
+      absolute = new URL(loc, baseUrl).toString();
+    } catch {
+      continue;
+    }
+    if (!isSameOrigin(absolute, baseUrl)) continue;
+
+    const pathname = new URL(absolute).pathname.toLowerCase();
+    if (pathname.endsWith(".xml")) {
+      const nested = await loadRemoteSitemapUrls(
+        absolute,
+        baseUrl,
+        seen,
+        depth + 1,
+      );
+      pageUrls.push(...nested);
+      continue;
+    }
+    if (!isLocalePath(new URL(absolute).pathname)) continue;
+    pageUrls.push(normalizeUrl(absolute));
+  }
+
+  return pageUrls;
+}
+
+async function getUrlsFromRemoteSitemap(baseUrl) {
+  const candidates = ["sitemap-0.xml", "sitemap.xml", "sitemap-index.xml"].map(
+    (s) => new URL(s, baseUrl).toString(),
+  );
+  const collected = new Set();
+  const seenSitemaps = new Set();
+
+  for (const sitemapUrl of candidates) {
+    const urls = await loadRemoteSitemapUrls(
+      sitemapUrl,
+      baseUrl,
+      seenSitemaps,
+      0,
+    );
+    for (const url of urls) {
+      collected.add(normalizeUrl(url));
+    }
+  }
+
+  return Array.from(collected).sort();
+}
+
 async function crawlAllPages(startUrl) {
   const visited = new Set();
   const toVisit = new Set([startUrl]);
@@ -676,6 +951,12 @@ function createReportIndex() {
       fallback: "jsonld",
       highlight: "report.txt (validator output)",
     },
+    {
+      name: "Security",
+      path: "security/report.html",
+      fallback: "security",
+      highlight: "report.html + stats.json",
+    },
   ];
 
   const cards = entries
@@ -730,8 +1011,17 @@ function createReportIndex() {
 }
 
 async function main() {
+  const envValues = loadProjectEnvValues();
   const selectedChecks = await promptForChecks();
+  const selectedTarget = await promptForTarget(envValues);
+  const baseUrl = selectedTarget?.baseUrl;
+  if (!baseUrl) {
+    throw new Error("No valid base URL resolved for selected target.");
+  }
+
   console.log(`🧪 Selected: ${selectedChecks.label}`);
+  console.log(`🌐 Target: ${selectedTarget.name}`);
+  console.log(`🔗 Base URL: ${baseUrl}`);
 
   console.log("🧹 Cleaning previous reports...");
   ensureCleanReports();
@@ -744,48 +1034,59 @@ async function main() {
     console.log("🔊 Full output enabled; streaming command output directly.");
   }
 
-  console.log("🏗️  Building site...");
+  let siteServer = null;
   try {
-    await runCommand("npm", ["run", "build"], {
-      label: "Build site",
-      logName: "build",
-    });
-  } catch (err) {
-    if (err?.logPath) {
-      console.error(`❌ Build failed (see ${err.logPath})`);
-      const tailLines = (err.tail || "")
-        .trim()
-        .split("\n")
-        .slice(-12)
-        .join("\n");
-      if (QUIET_MODE && tailLines) {
-        console.error(tailLines);
+    if (selectedTarget.usesLocalBuild) {
+      console.log("🏗️  Building site...");
+      try {
+        await runCommand("npm", ["run", "build"], {
+          label: "Build site",
+          logName: "build",
+        });
+      } catch (err) {
+        if (err?.logPath) {
+          console.error(`❌ Build failed (see ${err.logPath})`);
+          const tailLines = (err.tail || "")
+            .trim()
+            .split("\n")
+            .slice(-12)
+            .join("\n");
+          if (QUIET_MODE && tailLines) {
+            console.error(tailLines);
+          }
+        }
+        throw err;
       }
-    }
-    throw err;
-  }
 
-  console.log("🚀 Starting local server for build output...");
-  const siteServer = startStaticServer("./build", SITE_PORT, "site", {
-    quiet: QUIET_MODE,
-    logName: "site-serve",
-  });
-  try {
-    await waitForServer(BASE_URL);
-    console.log(`✅ Site server ready at ${BASE_URL}`);
+      console.log("🚀 Starting local server for build output...");
+      siteServer = startStaticServer("./build", SITE_PORT, "site", {
+        quiet: QUIET_MODE,
+        logName: "site-serve",
+      });
+      await waitForServer(baseUrl);
+      console.log(`✅ Site server ready at ${baseUrl}`);
+    } else {
+      console.log("🌍 Remote target selected: skipping local build/server.");
+      await waitForServer(baseUrl);
+      console.log(`✅ Remote target reachable at ${baseUrl}`);
+    }
 
     console.log("🔎 Discovering site URLs from sitemap (en/fr only)...");
-    let urls = getUrlsFromSitemap(BASE_URL);
+    let urls = selectedTarget.usesLocalBuild
+      ? getUrlsFromSitemap(baseUrl)
+      : await getUrlsFromRemoteSitemap(baseUrl);
     if (!urls.length) {
       console.log(
-        "ℹ️  Sitemap empty or missing, falling back to crawl of built site.",
+        selectedTarget.usesLocalBuild
+          ? "ℹ️  Sitemap empty or missing, falling back to crawl of built site."
+          : "ℹ️  Remote sitemap empty or missing, falling back to crawl of target site.",
       );
-      urls = await crawlAllPages(BASE_URL);
+      urls = await crawlAllPages(baseUrl);
     }
     urls = urls.filter((u) => {
       try {
         const p = new URL(u).pathname;
-        return p.startsWith("/en") || p.startsWith("/fr");
+        return isLocalePath(p);
       } catch {
         return false;
       }
@@ -837,7 +1138,7 @@ async function main() {
           [
             toolkitScriptPath("lighthouse-audit.mjs"),
             "--base",
-            BASE_URL,
+            baseUrl,
             "--urls-file",
             urlsFile,
             "--report-dir",
@@ -890,7 +1191,7 @@ async function main() {
           [
             toolkitScriptPath("pa11y-crawl-and-test.mjs"),
             "--base",
-            BASE_URL,
+            baseUrl,
             "--urls-file",
             urlsFile,
             "--report-dir",
@@ -926,7 +1227,7 @@ async function main() {
           [
             toolkitScriptPath("seo-audit.mjs"),
             "--base",
-            BASE_URL,
+            baseUrl,
             "--urls-file",
             urlsFile,
             "--report-dir",
@@ -962,7 +1263,7 @@ async function main() {
           [
             toolkitScriptPath("link-check.mjs"),
             "--base",
-            BASE_URL,
+            baseUrl,
             "--urls-file",
             urlsFile,
             "--report-dir",
@@ -988,6 +1289,11 @@ async function main() {
       selectedChecks.links,
     );
 
+    if (selectedChecks.jsonld && !selectedTarget.usesLocalBuild) {
+      console.log(
+        "ℹ️  JSON-LD validation only runs against local build output. Skipping for remote target.",
+      );
+    }
     await runStep(
       "JSON-LD validation",
       async () => {
@@ -1022,11 +1328,52 @@ async function main() {
           : "JSON-LD: 0 issues detected";
         return { summary, failed };
       },
-      selectedChecks.jsonld,
+      selectedChecks.jsonld && selectedTarget.usesLocalBuild,
     );
 
-    console.log("🛑 Stopping site server...");
-    siteServer.kill("SIGINT");
+    await runStep(
+      "Security audit",
+      async () => {
+        const result = await runCommand(
+          "node",
+          [
+            toolkitScriptPath("security-audit.mjs"),
+            "--base",
+            baseUrl,
+            "--report-dir",
+            path.join(REPORT_ROOT, "security"),
+            QUIET_MODE ? "--quiet" : "",
+          ].filter(Boolean),
+          {
+            label: "Security audit",
+            logName: "security",
+            allowFailure: true,
+            forceLog: true,
+          },
+        );
+
+        const security = summarizeSecurity(path.join(REPORT_ROOT, "security"));
+        const findings = security?.findingsTotal ?? 0;
+        const failed = security
+          ? security.failed
+          : Boolean(result?.exitCode && result.exitCode !== 0);
+        const summary = security
+          ? findings > 0
+            ? `Security findings: ${findings}`
+            : "Security findings: 0"
+          : failed
+            ? "Security audit failed before producing stats."
+            : "Security audit completed.";
+        return { summary, failed };
+      },
+      selectedChecks.security,
+    );
+
+    if (siteServer && !siteServer.killed) {
+      console.log("🛑 Stopping site server...");
+      siteServer.kill("SIGINT");
+      siteServer = null;
+    }
 
     const indexPath = createReportIndex();
     console.log(`📁 Report index created at ${indexPath}`);
@@ -1063,8 +1410,8 @@ async function main() {
 
     await waitForServerExit(reportServer);
   } finally {
-    // Ensure site server is not left running if something throws
-    if (!siteServer.killed) {
+    // Ensure site server is not left running if something throws.
+    if (siteServer && !siteServer.killed) {
       siteServer.kill("SIGINT");
     }
   }

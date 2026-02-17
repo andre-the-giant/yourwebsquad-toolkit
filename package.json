@@ -23,7 +23,6 @@
     "toolkit": "node ./bin/yws-toolkit.mjs"
   },
   "dependencies": {
-    "@mdn/mdn-http-observatory": "^1.4.0",
     "@adobe/structured-data-validator": "^1.6.0",
     "@marbec/web-auto-extractor": "^2.2.1",
     "chalk": "^5.3.0",

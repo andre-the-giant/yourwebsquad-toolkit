@@ -2,10 +2,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
 
 const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
 const DEFAULT_REPORT_DIR =
@@ -87,175 +83,143 @@ function writeJson(file, value) {
   fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
 }
 
-function extractJson(text) {
-  const trimmed = String(text || "").trim();
-  if (!trimmed) return null;
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    // fall through
+function isLocalOrPrivateHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  if (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host.endsWith(".local")
+  ) {
+    return true;
   }
+  if (/^10\.\d+\.\d+\.\d+$/.test(host)) return true;
+  if (/^192\.168\.\d+\.\d+$/.test(host)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(host)) return true;
+  return false;
+}
 
-  const first = trimmed.indexOf("{");
-  const last = trimmed.lastIndexOf("}");
-  if (first < 0 || last <= first) return null;
-  const candidate = trimmed.slice(first, last + 1);
+function getObservatoryHost(baseUrl) {
   try {
-    return JSON.parse(candidate);
+    return new URL(baseUrl).hostname;
   } catch {
-    return null;
+    return "";
   }
 }
 
-function runCommand(cmd, cmdArgs, { quiet = QUIET_MODE, timeoutMs } = {}) {
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (value) => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
+async function fetchObservatoryScan(host) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const endpoint = new URL(
+      "https://observatory-api.mdn.mozilla.net/api/v2/scan",
+    );
+    endpoint.searchParams.set("host", host);
+    const res = await fetch(endpoint, {
+      method: "POST",
+      signal: controller.signal,
+    });
+    const raw = await res.text();
+    let json = null;
+    try {
+      json = JSON.parse(raw);
+    } catch {
+      json = null;
+    }
+    return {
+      ok: res.ok,
+      status: res.status,
+      raw,
+      json,
     };
-
-    const child = spawn(cmd, cmdArgs, {
-      shell: false,
-      stdio: quiet ? ["ignore", "pipe", "pipe"] : "inherit",
-      env: process.env,
-    });
-
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    let timer = null;
-
-    if (quiet) {
-      child.stdout.on("data", (chunk) => {
-        stdout += chunk.toString();
-      });
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk.toString();
-      });
-    }
-
-    if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
-      timer = setTimeout(() => {
-        timedOut = true;
-        child.kill("SIGTERM");
-      }, timeoutMs);
-    }
-
-    child.on("error", (error) => {
-      if (timer) clearTimeout(timer);
-      finish({
-        code: 1,
-        stdout,
-        stderr: `${stderr}\n${error?.message || error}`.trim(),
-        timedOut: false,
-      });
-    });
-
-    child.on("exit", (code) => {
-      if (timer) clearTimeout(timer);
-      finish({
-        code: code ?? 1,
-        stdout,
-        stderr,
-        timedOut,
-      });
-    });
-  });
-}
-
-function resolveObservatoryBin() {
-  try {
-    const packageJsonPath =
-      require.resolve("@mdn/mdn-http-observatory/package.json");
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
-    const binEntry = packageJson?.bin?.["mdn-http-observatory-scan"];
-    if (!binEntry) return null;
-    return path.join(path.dirname(packageJsonPath), binEntry);
-  } catch {
-    return null;
+  } finally {
+    clearTimeout(timer);
   }
-}
-
-function parseObservatoryTarget(baseUrl) {
-  const parsed = new URL(baseUrl);
-  const host = parsed.hostname;
-  const port = parsed.port ? `:${parsed.port}` : "";
-  const pathname =
-    parsed.pathname && parsed.pathname !== "/" ? parsed.pathname : "";
-  return `${host}${port}${pathname}`;
 }
 
 async function runObservatory(baseUrl) {
-  const target = parseObservatoryTarget(baseUrl);
-  const localBin = resolveObservatoryBin();
-  const command = localBin ? process.execPath : "npx";
-  const commandArgs = localBin
-    ? [localBin, target]
-    : ["-y", "@mdn/mdn-http-observatory", target];
-
-  const result = await runCommand(command, commandArgs, {
-    quiet: true,
-    timeoutMs: TIMEOUT_MS,
-  });
-
-  if (result.timedOut) {
+  const host = getObservatoryHost(baseUrl);
+  if (!host) {
     return {
       status: "error",
       findings: 0,
-      message: "HTTP Observatory scan timed out.",
+      message: "Could not resolve hostname from base URL.",
       details: null,
     };
   }
+  if (isLocalOrPrivateHost(host)) {
+    return {
+      status: "skipped",
+      findings: 0,
+      message:
+        "HTTP Observatory API requires a publicly reachable domain. Skipping local/private host.",
+      details: { host },
+    };
+  }
 
-  const payload = extractJson(result.stdout || result.stderr);
-  if (payload) {
-    writeJson(path.join(REPORT_DIR, "observatory.json"), payload);
-  } else if (result.stdout || result.stderr) {
+  let response;
+  try {
+    response = await fetchObservatoryScan(host);
+  } catch (error) {
+    const isAbort = error?.name === "AbortError";
+    return {
+      status: "error",
+      findings: 0,
+      message: isAbort
+        ? "HTTP Observatory API request timed out."
+        : `HTTP Observatory API request failed: ${error?.message || error}`,
+      details: { host },
+    };
+  }
+
+  if (response?.json) {
+    writeJson(path.join(REPORT_DIR, "observatory.json"), response.json);
+  } else if (response?.raw) {
     fs.writeFileSync(
       path.join(REPORT_DIR, "observatory.raw.txt"),
-      `${result.stdout || ""}\n${result.stderr || ""}`.trim(),
+      response.raw,
       "utf8",
     );
   }
 
-  if (!payload) {
-    return {
-      status: "error",
-      findings: 0,
-      message: "Unable to parse HTTP Observatory output.",
-      details: null,
-    };
-  }
-
-  const scan = payload?.scan || {};
-  const testsFailed = Number(scan.testsFailed || 0);
+  const scan = response?.json || {};
+  const testsFailed = Number(scan.tests_failed || 0);
   const details = {
+    host,
+    id: Number(scan.id || 0) || null,
+    detailsUrl: scan.details_url || null,
     grade: scan.grade || null,
     score: Number.isFinite(scan.score) ? scan.score : null,
-    testsPassed: Number(scan.testsPassed || 0),
+    testsPassed: Number(scan.tests_passed || 0),
     testsFailed,
-    testsQuantity: Number(scan.testsQuantity || 0),
-    statusCode: Number(scan.statusCode || 0),
+    testsQuantity: Number(scan.tests_quantity || 0),
+    statusCode: Number(scan.status_code || 0),
     error: scan.error || null,
   };
 
+  if (!response?.json) {
+    return {
+      status: "error",
+      findings: 0,
+      message: `Unexpected HTTP Observatory response (status ${response?.status || 0}).`,
+      details,
+    };
+  }
+
   if (scan.error) {
     return {
-      status: "failed",
+      status: response.ok ? "failed" : "error",
       findings: Math.max(1, testsFailed),
       message: `HTTP Observatory error: ${scan.error}`,
       details,
     };
   }
 
-  if (result.code !== 0) {
+  if (!response.ok) {
     return {
       status: "error",
       findings: testsFailed,
-      message: "HTTP Observatory command failed.",
+      message: `HTTP Observatory API returned HTTP ${response.status}.`,
       details,
     };
   }

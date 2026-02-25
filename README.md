@@ -71,6 +71,136 @@ Available commands:
 }
 ```
 
+## Helpers
+
+Helper modules are exported as package subpaths.
+
+Import pattern:
+
+```js
+import { createStorageHelpers } from "yourwebsquad-toolkit/helpers/storage";
+```
+
+Available helper modules:
+
+- `yourwebsquad-toolkit/helpers/content`
+- `yourwebsquad-toolkit/helpers/jsonld`
+- `yourwebsquad-toolkit/helpers/props`
+- `yourwebsquad-toolkit/helpers/segments`
+- `yourwebsquad-toolkit/helpers/seo`
+- `yourwebsquad-toolkit/helpers/storage`
+
+### `helpers/content`
+
+Export: `createContentHelpers(options?)`
+
+Options:
+
+- `contentRoot` (`string`): root folder for content files. Default: `public/content` in current project.
+- `cache` (`Map`): optional shared cache map.
+
+Exposed methods:
+
+- `getContent(locale = "en", slug)`: loads and caches `public/content/<locale>/<slug>.json`.
+- `getCompany(slug)`: loads and caches `public/content/company/<slug>.json`.
+- `clearContentCache()`: clears in-memory content cache.
+
+### `helpers/jsonld`
+
+Export: `createJsonLdScript(nodes)`
+
+Exposed methods:
+
+- `createJsonLdScript(nodes)`: serializes JSON-LD nodes into a `<script type="application/ld+json">...</script>` string.
+
+### `helpers/props`
+
+Export: `validateProps(schema, props)`
+
+Exposed methods:
+
+- `validateProps(schema, props)`: validates props against a schema and throws on invalid values.
+
+Supported schema rule fields:
+
+- `required` (`boolean`)
+- `type` (`"string" | "number" | "boolean" | "object" | "array"`)
+- `validate` (`(value) => boolean | string`)
+
+### `helpers/segments`
+
+Export: `createSegmentHelpers(options?)`
+
+Options:
+
+- `segments` (`object`): segment map by key and locale (for example `artist: { en: "artist", fr: "artiste" }`).
+
+Exposed methods:
+
+- `getSegment(locale = "en", key = "artist")`: returns localized segment value.
+- `assertSegmentMatch(locale, key, value)`: throws when value does not match expected localized segment.
+- `getSegmentKey(segmentValue)`: resolves segment key from a localized segment value.
+- `mapSegmentToLocale(segmentValue, targetLocale = "en")`: maps a segment value to another locale.
+- `pathFor(locale = "en", key = "artist", slug)`: builds route path (for example `/en/artist/slug/`).
+- `alternatesFor(key = "artist", slug)`: returns alternate localized paths array.
+- `segments`: original segments map.
+
+### `helpers/seo`
+
+Exports:
+
+- `buildSeo(input?, options?)`
+- `buildJsonLd(input?, options?)`
+
+`buildSeo` method details:
+
+- Builds canonical URL, hreflang links, OG/Twitter fields, and merged defaults.
+- Returns: `title`, `description`, `image`, `imageAlt`, `siteName`, `twitterSite`, `twitterCreator`, `canonical`, `locale`, `ogLocale`, `hrefLangs`.
+
+`buildJsonLd` method details:
+
+- Builds a JSON-LD array for website/webpage/local business plus optional breadcrumbs and extras.
+- Returns an array of schema nodes ready to render.
+
+### `helpers/storage`
+
+Export: `createStorageHelpers(options?)`
+
+Purpose:
+
+- Uses `localStorage` when available.
+- Automatically falls back to cookies when `localStorage` is unavailable.
+
+Options:
+
+- `prefix` (`string`): optional key prefix to namespace all entries.
+- `cookie` (`object`): cookie defaults when fallback is used.
+- `storage` (`Storage`): custom storage object override.
+- `documentRef` (`Document`): custom document object override.
+
+Supported cookie fields:
+
+- `path` (`string`, default `/`)
+- `sameSite` (`string`, default `Lax`)
+- `secure` (`boolean`)
+- `domain` (`string`)
+- `maxAge` (`number`, default one year in seconds)
+
+Exposed methods:
+
+- `backend`: `"localStorage"`, `"cookie"`, or `"none"` based on selected backend.
+- `setItem(key, value, options?)`: stores a string value.
+- `getItem(key)`: returns stored string value or `null`.
+- `getOrCreate(key, valueOrFactory, options?)`: returns existing value or writes/returns a new one.
+- `hasItem(key)`: boolean existence check.
+- `removeItem(key, options?)`: removes one key.
+- `clear(options?)`: removes all keys managed by this helper (respecting `prefix`).
+- `key(index)`: returns key name by index or `null`.
+- `keys()`: returns all key names managed by this helper.
+- `length()`: returns number of managed keys.
+- `setJson(key, value, options?)`: serializes and stores JSON.
+- `getJson(key, fallback = null)`: parses JSON and returns fallback on missing/invalid data.
+
 ## `scaffold newpage` prerequisites
 
 The generator expects boilerplate-style structure in the target project (`process.cwd()`):

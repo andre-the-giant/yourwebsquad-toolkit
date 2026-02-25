@@ -11,7 +11,8 @@
     "./helpers/jsonld": "./helpers/jsonld.mjs",
     "./helpers/props": "./helpers/props.mjs",
     "./helpers/segments": "./helpers/segments.mjs",
-    "./helpers/seo": "./helpers/seo.mjs"
+    "./helpers/seo": "./helpers/seo.mjs",
+    "./helpers/storage": "./helpers/storage.mjs"
   },
   "bin": {
     "yws-toolkit": "./bin/yws-toolkit.mjs"

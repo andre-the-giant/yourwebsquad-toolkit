@@ -225,7 +225,16 @@ Optional flags:
 - `--target development|production|staging`
 - `--base <url>` (overrides target and runs against the exact URL)
 
-Note: JSON-LD validation requires local build files, so it is skipped automatically for remote targets (`production`/`staging`/`--base`).
+### Check availability by environment
+
+The test selection prompt adapts to the selected target environment.
+
+- `development`:
+  - JSON-LD validation: available
+  - Security audit: unavailable (requires remote server target)
+- `staging` / `production` / `--base` (remote):
+  - JSON-LD validation: unavailable (local build only)
+  - Security audit: available
 
 ### Lighthouse output
 
@@ -240,6 +249,16 @@ Generated files:
 - `reports/lighthouse/summary.html`
 - `reports/lighthouse/SUMMARY.md`
 - `reports/lighthouse/metrics.json`
+
+### JSON-LD output
+
+When JSON-LD validation is selected on `development`, reports are generated under `reports/jsonld`:
+
+- `report.html`: summary table (`URL`, `Errors`, `Warnings`, `Report`)
+- `pages/*.html`: one detail report per page, including extracted schema and issue details
+- `issues.json`: all JSON-LD issues
+- `stats.json`: aggregate counts (`pagesTested`, `errorCount`, `warningCount`, ...)
+- `report.txt`: compatibility text summary with pointers to artifacts
 
 ## Security checks
 

@@ -107,6 +107,15 @@ const TEST_CHOICES = [
   { name: "Security audit", value: "security" },
 ];
 
+const CHECK_KEYS = [
+  "lighthouse",
+  "pa11y",
+  "seo",
+  "links",
+  "jsonld",
+  "security",
+];
+
 function choiceToFlags(choice) {
   if (choice === "all") {
     return {
@@ -131,17 +140,63 @@ function choiceToFlags(choice) {
   };
 }
 
-async function promptForChecks() {
+function buildCheckAvailability(selectedTarget) {
+  const isRemoteTarget = !selectedTarget?.usesLocalBuild;
+  return {
+    lighthouse: { enabled: true },
+    pa11y: { enabled: true },
+    seo: { enabled: true },
+    links: { enabled: true },
+    jsonld: isRemoteTarget
+      ? {
+          enabled: false,
+          reason: "Not available on staging/production (local build only)",
+        }
+      : { enabled: true },
+    security: isRemoteTarget
+      ? { enabled: true }
+      : {
+          enabled: false,
+          reason: "Not available on development (requires remote server)",
+        },
+  };
+}
+
+function applyAvailabilityToFlags(flags, availability) {
+  const next = { ...flags };
+  for (const key of CHECK_KEYS) {
+    if (availability?.[key]?.enabled === false) {
+      next[key] = false;
+    }
+  }
+  return next;
+}
+
+async function promptForChecks(selectedTarget) {
+  const availability = buildCheckAvailability(selectedTarget);
+  const choices = TEST_CHOICES.map((choice) => {
+    if (choice.value === "all") return choice;
+    const rule = availability?.[choice.value];
+    if (rule?.enabled === false) {
+      return { ...choice, disabled: rule.reason || "Not available" };
+    }
+    return choice;
+  });
+
   const { choice } = await inquirer.prompt([
     {
       type: "list",
       name: "choice",
       message: "Which test do you want to perform?",
-      choices: TEST_CHOICES,
+      choices,
       default: "all",
     },
   ]);
-  return choiceToFlags(choice);
+  const selected = applyAvailabilityToFlags(choiceToFlags(choice), availability);
+  if (choice === "all") {
+    selected.label = "All available checks";
+  }
+  return selected;
 }
 
 function unquoteEnvValue(value) {
@@ -324,6 +379,16 @@ function summarizeSecurity(reportDir) {
     failed: Boolean(stats.failed),
     findingsTotal: Number(stats.findingsTotal || 0),
     tools: stats.tools || {},
+  };
+}
+
+function summarizeJsonld(reportDir) {
+  const stats = readJsonIfExists(path.join(reportDir, "stats.json"));
+  if (!stats) return null;
+  return {
+    pagesTested: Number(stats.pagesTested || 0),
+    errors: Number(stats.errorCount || 0),
+    warnings: Number(stats.warningCount || 0),
   };
 }
 
@@ -1001,9 +1066,9 @@ function createReportIndex() {
     },
     {
       name: "JSON-LD",
-      path: "jsonld/report.txt",
+      path: "jsonld/report.html",
       fallback: "jsonld",
-      highlight: "report.txt (validator output)",
+      highlight: "report.html + stats.json",
     },
     {
       name: "Security",
@@ -1066,8 +1131,9 @@ function createReportIndex() {
 
 async function main() {
   const envValues = loadProjectEnvValues();
-  const selectedChecks = await promptForChecks();
   const selectedTarget = await promptForTarget(envValues);
+  const selectedChecks = await promptForChecks(selectedTarget);
+  const availability = buildCheckAvailability(selectedTarget);
   const baseUrl = selectedTarget?.baseUrl;
   if (!baseUrl) {
     throw new Error("No valid base URL resolved for selected target.");
@@ -1076,6 +1142,15 @@ async function main() {
   console.log(`🧪 Selected: ${selectedChecks.label}`);
   console.log(`🌐 Target: ${selectedTarget.name}`);
   console.log(`🔗 Base URL: ${baseUrl}`);
+  const unavailableChecks = Object.entries(availability)
+    .filter(([, rule]) => rule?.enabled === false)
+    .map(([key, rule]) => {
+      const name = TEST_CHOICES.find((choice) => choice.value === key)?.name || key;
+      return `${name}${rule?.reason ? ` (${rule.reason})` : ""}`;
+    });
+  if (unavailableChecks.length) {
+    console.log(`ℹ️  Unavailable for this target: ${unavailableChecks.join("; ")}`);
+  }
 
   console.log("🧹 Cleaning previous reports...");
   ensureCleanReports();
@@ -1351,12 +1426,14 @@ async function main() {
     await runStep(
       "JSON-LD validation",
       async () => {
+        const reportDir = path.join(REPORT_ROOT, "jsonld");
         const result = await runCommand(
           "node",
           [
             toolkitScriptPath("jsonld-validate.mjs"),
             "build",
             `--urls-file=${urlsFile}`,
+            `--report-dir=${reportDir}`,
           ],
           {
             label: "JSON-LD validation",
@@ -1367,19 +1444,16 @@ async function main() {
           },
         );
 
-        const reportDir = path.join(REPORT_ROOT, "jsonld");
-        fs.mkdirSync(reportDir, { recursive: true });
-        const reportPath = path.join(reportDir, "report.txt");
-        if (result?.logPath && fs.existsSync(result.logPath)) {
-          fs.copyFileSync(result.logPath, reportPath);
-        } else {
-          fs.writeFileSync(reportPath, "No log output captured.", "utf8");
-        }
-
-        const failed = result?.exitCode && result.exitCode !== 0;
-        const summary = failed
-          ? "JSON-LD issues found (see reports/jsonld/report.txt)"
-          : "JSON-LD: 0 issues detected";
+        const counts = summarizeJsonld(reportDir);
+        const errors = counts?.errors ?? 0;
+        const warnings = counts?.warnings ?? 0;
+        const pages = counts?.pagesTested ?? 0;
+        const failed = errors > 0 || (result?.exitCode && result.exitCode !== 0);
+        const summary = counts
+          ? `JSON-LD: ${errors} errors${warnings ? `, ${warnings} warnings` : ""} across ${pages} page(s) (report: reports/jsonld/report.html)`
+          : failed
+            ? "JSON-LD validation failed before writing stats."
+            : "JSON-LD validation completed (stats unavailable).";
         return { summary, failed };
       },
       selectedChecks.jsonld && selectedTarget.usesLocalBuild,

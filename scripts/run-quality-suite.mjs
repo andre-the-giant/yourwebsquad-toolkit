@@ -192,7 +192,10 @@ async function promptForChecks(selectedTarget) {
       default: "all",
     },
   ]);
-  const selected = applyAvailabilityToFlags(choiceToFlags(choice), availability);
+  const selected = applyAvailabilityToFlags(
+    choiceToFlags(choice),
+    availability,
+  );
   if (choice === "all") {
     selected.label = "All available checks";
   }
@@ -1145,11 +1148,14 @@ async function main() {
   const unavailableChecks = Object.entries(availability)
     .filter(([, rule]) => rule?.enabled === false)
     .map(([key, rule]) => {
-      const name = TEST_CHOICES.find((choice) => choice.value === key)?.name || key;
+      const name =
+        TEST_CHOICES.find((choice) => choice.value === key)?.name || key;
       return `${name}${rule?.reason ? ` (${rule.reason})` : ""}`;
     });
   if (unavailableChecks.length) {
-    console.log(`ℹ️  Unavailable for this target: ${unavailableChecks.join("; ")}`);
+    console.log(
+      `ℹ️  Unavailable for this target: ${unavailableChecks.join("; ")}`,
+    );
   }
 
   console.log("🧹 Cleaning previous reports...");
@@ -1448,7 +1454,8 @@ async function main() {
         const errors = counts?.errors ?? 0;
         const warnings = counts?.warnings ?? 0;
         const pages = counts?.pagesTested ?? 0;
-        const failed = errors > 0 || (result?.exitCode && result.exitCode !== 0);
+        const failed =
+          errors > 0 || (result?.exitCode && result.exitCode !== 0);
         const summary = counts
           ? `JSON-LD: ${errors} errors${warnings ? `, ${warnings} warnings` : ""} across ${pages} page(s) (report: reports/jsonld/report.html)`
           : failed

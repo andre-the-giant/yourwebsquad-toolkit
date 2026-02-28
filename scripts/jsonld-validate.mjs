@@ -242,7 +242,9 @@ function writeJsonldArtifacts(pageResults, issues) {
 
 function pageReportFileName(page, index) {
   const candidate =
-    page.url || page.pagePath || path.basename(page.file, path.extname(page.file));
+    page.url ||
+    page.pagePath ||
+    path.basename(page.file, path.extname(page.file));
   const slug = slugify(candidate) || `page-${index + 1}`;
   return `${String(index + 1).padStart(3, "0")}-${slug}.html`;
 }
@@ -265,9 +267,10 @@ function writeJsonldPageReports(pageResults) {
           .map((issue) => {
             const severityClass =
               issue.severity === "WARNING" ? "warning" : "error";
-            const fields = Array.isArray(issue.fieldNames) && issue.fieldNames.length
-              ? `<div class="meta">fields: ${escapeHtml(issue.fieldNames.join(", "))}</div>`
-              : "";
+            const fields =
+              Array.isArray(issue.fieldNames) && issue.fieldNames.length
+                ? `<div class="meta">fields: ${escapeHtml(issue.fieldNames.join(", "))}</div>`
+                : "";
             const issuePath = formatPath(issue.path);
             const pathRow = issuePath
               ? `<div class="meta">path: ${escapeHtml(issuePath)}</div>`
@@ -522,13 +525,13 @@ async function main() {
     } catch (error) {
       fileIssues = [
         {
-        file,
-        pagePath,
-        severity: "ERROR",
-        issueMessage: `Validator crashed: ${error?.message || error}`,
-        fieldNames: [],
-        path: [],
-        location: null,
+          file,
+          pagePath,
+          severity: "ERROR",
+          issueMessage: `Validator crashed: ${error?.message || error}`,
+          fieldNames: [],
+          path: [],
+          location: null,
         },
       ];
     }

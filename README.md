@@ -227,6 +227,20 @@ Optional flags:
 
 Note: JSON-LD validation requires local build files, so it is skipped automatically for remote targets (`production`/`staging`/`--base`).
 
+### Lighthouse output
+
+When Lighthouse is selected in `yws-toolkit quality run`, the generated summary now includes:
+
+- HTML size (document transfer size)
+- Total loaded size (HTML + all loaded resources transfer size)
+- Total load time
+
+Generated files:
+
+- `reports/lighthouse/summary.html`
+- `reports/lighthouse/SUMMARY.md`
+- `reports/lighthouse/metrics.json`
+
 ## Security checks
 
 `yws-toolkit quality security` runs:

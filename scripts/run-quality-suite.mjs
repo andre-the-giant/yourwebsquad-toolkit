@@ -804,6 +804,45 @@ function findHtmlReport(reportDir, baseName) {
   return candidates.find(fs.existsSync);
 }
 
+function asFiniteNumber(value) {
+  return Number.isFinite(value) ? Number(value) : null;
+}
+
+function findResourceSummaryItem(report, resourceType) {
+  const items = report?.audits?.["resource-summary"]?.details?.items;
+  if (!Array.isArray(items)) return null;
+  const match = items.find((item) => item?.resourceType === resourceType);
+  return match || null;
+}
+
+function extractLighthouseMetrics(report) {
+  const metrics = report?.audits?.metrics?.details?.items?.[0] || {};
+  const totalSummary = findResourceSummaryItem(report, "total");
+  const documentSummary = findResourceSummaryItem(report, "document");
+
+  return {
+    htmlSizeBytes: asFiniteNumber(documentSummary?.transferSize),
+    totalLoadedSizeBytes:
+      asFiniteNumber(report?.audits?.["total-byte-weight"]?.numericValue) ??
+      asFiniteNumber(totalSummary?.transferSize),
+    totalLoadTimeMs:
+      asFiniteNumber(metrics.observedLoad) ??
+      asFiniteNumber(report?.audits?.["metrics"]?.numericValue),
+  };
+}
+
+function formatBytes(value) {
+  if (!Number.isFinite(value)) return "-";
+  if (value < 1024) return `${Math.round(value)} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function formatMs(value) {
+  if (!Number.isFinite(value)) return "-";
+  return `${Math.round(value)} ms`;
+}
+
 function generateLighthouseSummary(reportDir) {
   if (!fs.existsSync(reportDir)) return null;
   const files = fs.readdirSync(reportDir);
@@ -833,9 +872,11 @@ function generateLighthouseSummary(reportDir) {
     }
     const baseName = path.basename(file, ".json");
     const htmlReport = findHtmlReport(reportDir, baseName);
+    const metrics = extractLighthouseMetrics(data);
     runs.push({
       url,
       scores,
+      metrics,
       htmlReport: htmlReport ? path.basename(htmlReport) : null,
     });
   }
@@ -846,21 +887,32 @@ function generateLighthouseSummary(reportDir) {
   const md = [
     "# Lighthouse summary",
     "",
-    "| URL | Perf | Acc | Best | SEO |",
-    "| --- | --- | --- | --- | --- |",
+    "| URL | Perf | Acc | Best | SEO | HTML size | Total loaded size | Total load time |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
   ];
   for (const run of runs) {
     const s = run.scores;
+    const m = run.metrics || {};
     md.push(
-      `| ${run.url} | ${s.performance ?? "-"} | ${s.accessibility ?? "-"} | ${s["best-practices"] ?? "-"} | ${s.seo ?? "-"} |`,
+      `| ${run.url} | ${s.performance ?? "-"} | ${s.accessibility ?? "-"} | ${s["best-practices"] ?? "-"} | ${s.seo ?? "-"} | ${formatBytes(m.htmlSizeBytes)} | ${formatBytes(m.totalLoadedSizeBytes)} | ${formatMs(m.totalLoadTimeMs)} |`,
     );
   }
   const mdPath = path.join(reportDir, "SUMMARY.md");
   fs.writeFileSync(mdPath, md.join("\n"), "utf8");
 
+  const metricsData = runs.map((run) => ({
+    url: run.url,
+    htmlSizeBytes: run.metrics?.htmlSizeBytes ?? null,
+    totalLoadedSizeBytes: run.metrics?.totalLoadedSizeBytes ?? null,
+    totalLoadTimeMs: run.metrics?.totalLoadTimeMs ?? null,
+  }));
+  const metricsPath = path.join(reportDir, "metrics.json");
+  fs.writeFileSync(metricsPath, JSON.stringify(metricsData, null, 2), "utf8");
+
   const rows = runs
     .map((run) => {
       const s = run.scores;
+      const m = run.metrics || {};
       const link = run.htmlReport
         ? `<a href="./${run.htmlReport}">report</a>`
         : "report";
@@ -870,6 +922,9 @@ function generateLighthouseSummary(reportDir) {
         <td>${s.accessibility ?? "-"}</td>
         <td>${s["best-practices"] ?? "-"}</td>
         <td>${s.seo ?? "-"}</td>
+        <td>${formatBytes(m.htmlSizeBytes)}</td>
+        <td>${formatBytes(m.totalLoadedSizeBytes)}</td>
+        <td>${formatMs(m.totalLoadTimeMs)}</td>
         <td>${link}</td>
       </tr>`;
     })
@@ -892,7 +947,7 @@ function generateLighthouseSummary(reportDir) {
   <h1>Lighthouse summary</h1>
   <table>
     <thead>
-      <tr><th>URL</th><th>Performance</th><th>Accessibility</th><th>Best Practices</th><th>SEO</th><th>Report</th></tr>
+      <tr><th>URL</th><th>Performance</th><th>Accessibility</th><th>Best Practices</th><th>SEO</th><th>HTML size</th><th>Total loaded size</th><th>Total load time</th><th>Report</th></tr>
     </thead>
     <tbody>
       ${rows}
@@ -903,7 +958,7 @@ function generateLighthouseSummary(reportDir) {
 
   const htmlPath = path.join(reportDir, "summary.html");
   fs.writeFileSync(htmlPath, html, "utf8");
-  return { mdPath, htmlPath };
+  return { mdPath, htmlPath, metricsPath };
 }
 
 function ensureLighthousePlaceholder(reportDir, message) {

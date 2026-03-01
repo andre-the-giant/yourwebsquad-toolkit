@@ -32,6 +32,16 @@ const EXTERNAL_BOT_PROTECTION_HOSTS = new Set(
 const visited = new Set();
 const toVisit = new Set([BASE_URL]);
 const linkCache = new Map(); // normalizedUrl -> result
+const REPORT_NAV_MODEL = [
+  { key: "site-home", label: "Home", href: "/" },
+  { key: "home", label: "Quality Reports", path: "index.html" },
+  { key: "lighthouse", label: "Lighthouse", path: "lighthouse/summary.html" },
+  { key: "pa11y", label: "Accessibility (Pa11y)", path: "pa11y/report.html" },
+  { key: "seo", label: "SEO", path: "seo/report.html" },
+  { key: "links", label: "Link check", path: "links/report.html" },
+  { key: "jsonld", label: "JSON-LD", path: "jsonld/report.html" },
+  { key: "security", label: "Security", path: "security/report.html" },
+];
 
 function parseArgs(argv) {
   const opts = {};
@@ -288,15 +298,30 @@ async function checkLink(url, isExternal) {
 
   let res;
   let error;
+  let headStatus = null;
+  let headError = null;
+  let fallbackUsed = false;
 
   try {
     res = await fetchWithTimeout(normalized, "HEAD");
-    if (!res.ok && res.status >= 400) {
-      // try GET in case HEAD is blocked
-      res = await fetchWithTimeout(normalized, "GET");
-    }
+    headStatus = Number(res?.status || 0) || null;
   } catch (err) {
     error = err;
+    headError = err?.message || "HEAD request failed";
+  }
+
+  const shouldFallbackToGet = !res || (!res.ok && res.status >= 400);
+  if (shouldFallbackToGet) {
+    fallbackUsed = true;
+    try {
+      const getRes = await fetchWithTimeout(normalized, "GET");
+      res = getRes;
+      error = null;
+    } catch (err) {
+      if (!res) {
+        error = err;
+      }
+    }
   }
 
   if (!res) {
@@ -306,6 +331,10 @@ async function checkLink(url, isExternal) {
       status: 0,
       error: error?.message || "Request failed",
       isExternal,
+      headStatus,
+      headError,
+      fallbackUsed,
+      method: fallbackUsed ? "GET" : "HEAD",
     };
     linkCache.set(normalized, result);
     return result;
@@ -317,6 +346,10 @@ async function checkLink(url, isExternal) {
     status: res.status,
     isExternal,
     finalUrl: res.url,
+    headStatus,
+    headError,
+    fallbackUsed,
+    method: fallbackUsed ? "GET" : "HEAD",
   };
 
   if (isExternal && res.status === 403) {
@@ -336,6 +369,32 @@ async function checkLink(url, isExternal) {
 
   linkCache.set(normalized, result);
   return result;
+}
+
+function formatStatusText(link) {
+  if (link?.skipped) return "skipped";
+  const statusPart = link?.status ? String(link.status) : "unknown";
+  const scopePart = link?.isExternal ? "external" : null;
+  const fallbackPart = link?.fallbackUsed
+    ? `fallback: HEAD ${
+        Number.isFinite(link?.headStatus) && link.headStatus > 0
+          ? link.headStatus
+          : "failed"
+      } -> GET`
+    : null;
+  return [statusPart, scopePart, fallbackPart].filter(Boolean).join(" · ");
+}
+
+function formatIssueStatusText(issue) {
+  const scope = issue?.isExternal ? "external" : "internal";
+  const statusCore = issue?.status ? `status ${issue.status}` : issue?.error || "failed";
+  const fallback =
+    issue?.fallbackUsed && !issue?.error
+      ? `, fallback HEAD ${issue?.headStatus || "failed"} -> GET`
+      : issue?.fallbackUsed && issue?.error
+        ? ", fallback GET failed"
+        : "";
+  return `${statusCore}${fallback}, ${scope}`;
 }
 
 async function crawl() {
@@ -397,36 +456,64 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
-function renderCrossNav(currentKey) {
-  const links = [
-    { key: "home", label: "Quality Reports", href: "../index.html" },
-    {
-      key: "lighthouse",
-      label: "Lighthouse",
-      href: "../lighthouse/summary.html",
-    },
-    {
-      key: "pa11y",
-      label: "Accessibility (Pa11y)",
-      href: "../pa11y/report.html",
-    },
-    { key: "seo", label: "SEO", href: "../seo/report.html" },
-    { key: "links", label: "Link check", href: "../links/report.html" },
-    { key: "jsonld", label: "JSON-LD Summary", href: "../jsonld/report.html" },
-    { key: "security", label: "Security", href: "../security/report.html" },
-  ]
-    .filter((link) => {
-      if (link.key === currentKey) return false;
-      const absTarget = path.join(
-        process.cwd(),
-        "reports",
-        link.href.replace("../", ""),
-      );
-      return fs.existsSync(absTarget);
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function pageReportFileName(pageUrl, index) {
+  let source = pageUrl;
+  try {
+    const u = new URL(pageUrl);
+    source = `${u.pathname}${u.search}` || u.hostname || pageUrl;
+  } catch {
+    // keep source as provided
+  }
+  const slug = slugify(source) || `page-${index + 1}`;
+  return `${String(index + 1).padStart(3, "0")}-${slug}.html`;
+}
+
+function filterPagesForReport(pages, { brokenOnly = false } = {}) {
+  return brokenOnly
+    ? pages
+        .map((page) => {
+          const brokenLinks = page.links.filter((l) => !l.ok && !l.skipped);
+          return brokenLinks.length ? { ...page, links: brokenLinks } : null;
+        })
+        .filter(Boolean)
+    : pages;
+}
+
+function buildCrossNavLinks(currentReportPath, options = {}) {
+  const currentFile = String(currentReportPath || "links/report.html").replace(
+    /\\/g,
+    "/",
+  );
+  const currentDir = path.posix.dirname(currentFile);
+  const excludeKeys = new Set(options.excludeKeys || []);
+  const reportsRoot = path.resolve(REPORT_DIR, "..");
+
+  return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key))
+    .map((item) => {
+      if (item.href) return { ...item, href: item.href };
+      const target = String(item.path || "").replace(/\\/g, "/");
+      if (!target) return null;
+      const absTarget = path.join(reportsRoot, target);
+      if (!fs.existsSync(absTarget)) return null;
+      const rel = path.posix.relative(currentDir, target);
+      return { ...item, href: rel || "./" };
     })
+    .filter(Boolean);
+}
+
+function renderCrossNav(currentReportPath, options = {}) {
+  const links = buildCrossNavLinks(currentReportPath, options)
     .map(
       (link) =>
-        `<a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`,
+        `<a href="${escapeHtml(link.href || "#")}">${escapeHtml(link.label)}</a>`,
     )
     .join("");
   return links ? `<div class="report-nav">${links}</div>` : "";
@@ -479,7 +566,7 @@ function writeMarkdown(pages, broken, skippedExternal, reportDir) {
   } else {
     for (const issue of broken) {
       lines.push(
-        `- ${issue.pageUrl} → ${issue.linkUrl} (status: ${issue.status || "failed"}${issue.isExternal ? ", external" : ""})`,
+        `- ${issue.pageUrl} → ${issue.linkUrl} (${formatIssueStatusText(issue)})`,
       );
       if (issue.selector) lines.push(`  - Selector: \`${issue.selector}\``);
       if (issue.text) lines.push(`  - Text: ${issue.text}`);
@@ -492,60 +579,145 @@ function writeMarkdown(pages, broken, skippedExternal, reportDir) {
   return summaryPath;
 }
 
+function writeLinkPageReports(pages, reportDir, { brokenOnly = false } = {}) {
+  const filteredPages = filterPagesForReport(pages, { brokenOnly });
+  const pagesDir = path.join(reportDir, "pages");
+  fs.rmSync(pagesDir, { recursive: true, force: true });
+  fs.mkdirSync(pagesDir, { recursive: true });
+  const reportPathByUrl = new Map();
+
+  for (let index = 0; index < filteredPages.length; index += 1) {
+    const page = filteredPages[index];
+    const fileName = pageReportFileName(page.url, index);
+    const brokenCount = page.links.filter((l) => !l.ok && !l.skipped).length;
+    const checkedCount = page.links.filter((l) => !l.skipped).length;
+    const skippedCount = page.links.filter((l) => l.skipped).length;
+
+    const rows = page.links.length
+      ? page.links
+          .map((link) => {
+            const statusClass = !link.ok
+              ? "fail"
+              : link.skipped
+                ? "warn"
+                : "pass";
+            return `<tr>
+              <td>${escapeHtml(link.linkUrl || "")}</td>
+              <td><span class="status-chip ${statusClass}">${escapeHtml(formatStatusText(link))}</span></td>
+              <td>${escapeHtml(link.selector || "")}</td>
+              <td>${escapeHtml(link.text || "")}</td>
+              <td>${escapeHtml(link.error || "")}</td>
+            </tr>`;
+          })
+          .join("\n")
+      : '<tr><td colspan="5">No links found.</td></tr>';
+
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Link page report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #0b1021; color: #e8ecf5; }
+    h1 { margin-bottom: 0; }
+    .summary { margin: 0 0 20px; color: #9fb3ff; }
+    .report-nav { margin: 10px 0 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .report-nav a {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #1f2a45;
+      background: color-mix(in srgb, #11172d 75%, transparent);
+      color: #9fb3ff;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .report-nav a:hover {
+      border-color: color-mix(in srgb, #9fb3ff 40%, #1f2a45);
+      background: color-mix(in srgb, #9fb3ff 16%, #11172d);
+    }
+    .report-section { margin-bottom: 18px; background: #11172d; border: 1px solid #1f2a45; border-radius: 10px; padding: 14px; }
+    .snapshot-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #1f2a45;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .status-chip.info { color: #8fd5ff; }
+    .status-chip.pass { color: #9ef5a1; }
+    .status-chip.warn { color: #ffd27f; }
+    .status-chip.fail { color: #ff8a8a; }
+    .report-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    .report-table th, .report-table td { border: 1px solid #1f2a45; padding: 8px; text-align: left; vertical-align: top; }
+    .report-table th { background: #172b4e; }
+  </style>
+</head>
+<body>
+  <h1>Link page report</h1>
+  <p class="summary">${escapeHtml(page.url)}</p>
+  ${renderCrossNav(`links/pages/${fileName}`)}
+  <section class="report-section">
+    <div class="snapshot-chips">
+      <span class="status-chip info">1 Page</span>
+      <span class="status-chip ${brokenCount > 0 ? "fail" : "pass"}">${brokenCount} Broken</span>
+      <span class="status-chip info">${checkedCount} Checked</span>
+      <span class="status-chip ${skippedCount > 0 ? "warn" : "pass"}">${skippedCount} Skipped</span>
+    </div>
+  </section>
+  <section class="report-section">
+    <table class="report-table">
+      <thead>
+        <tr><th>URL</th><th>Status</th><th>Selector</th><th>Text</th><th>Error</th></tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  </section>
+</body>
+</html>`;
+
+    fs.writeFileSync(path.join(pagesDir, fileName), html, "utf8");
+    reportPathByUrl.set(page.url, `./pages/${fileName}`);
+  }
+
+  return { count: filteredPages.length, reportPathByUrl };
+}
+
 function writeHtml(
   pages,
   broken,
   skippedExternal,
   reportDir,
+  reportPathByUrl = new Map(),
   { brokenOnly = false } = {},
 ) {
-  const filteredPages = brokenOnly
-    ? pages
-        .map((page) => {
-          const brokenLinks = page.links.filter((l) => !l.ok && !l.skipped);
-          return brokenLinks.length ? { ...page, links: brokenLinks } : null;
-        })
-        .filter(Boolean)
-    : pages;
-
-  const sections = filteredPages
+  const filteredPages = filterPagesForReport(pages, { brokenOnly });
+  const pagesWithBrokenLinks = filteredPages.filter((page) =>
+    page.links.some((l) => !l.ok && !l.skipped),
+  ).length;
+  const tableRows = filteredPages
     .map((page) => {
-      const rows = page.links.length
-        ? page.links
-            .map((link) => {
-              const cls = !link.ok ? "error" : link.skipped ? "skipped" : "ok";
-              const statusText = link.skipped
-                ? "skipped"
-                : link.status
-                  ? `${link.status}${link.isExternal ? " · external" : ""}`
-                  : link.isExternal
-                    ? "external"
-                    : "unknown";
-              const selector = link.selector
-                ? `<div class="selector">${escapeHtml(link.selector)}</div>`
-                : "";
-              const text = link.text
-                ? `<div class="selector">${escapeHtml(link.text)}</div>`
-                : "";
-              return `<li class="${cls}">
-                <div class="url">${escapeHtml(link.linkUrl)}</div>
-                <div class="meta">${escapeHtml(statusText)}</div>
-                ${selector}
-                ${text}
-                ${link.error ? `<div class="err">Error: ${escapeHtml(link.error)}</div>` : ""}
-              </li>`;
-            })
-            .join("")
-        : '<li class="ok">No links found</li>';
-
       const brokenCount = page.links.filter((l) => !l.ok && !l.skipped).length;
-      return `
-        <section class="page">
-          <h2>${escapeHtml(page.url)}</h2>
-          <div class="counts"><span class="${brokenCount ? "error" : "ok"}">${brokenCount} broken</span></div>
-          <ul class="links">${rows}</ul>
-        </section>
-      `;
+      const checkedCount = page.links.filter((l) => !l.skipped).length;
+      const skippedCount = page.links.filter((l) => l.skipped).length;
+      const reportHref = reportPathByUrl.get(page.url);
+      const reportLink = reportHref
+        ? `<a class="report-link-btn" href="${escapeHtml(reportHref)}">report</a>`
+        : "-";
+      return `<tr>
+        <td>${escapeHtml(page.url)}</td>
+        <td>${brokenCount}</td>
+        <td>${checkedCount}</td>
+        <td>${skippedCount}</td>
+        <td>${reportLink}</td>
+      </tr>`;
     })
     .join("\n");
 
@@ -558,28 +730,81 @@ function writeHtml(
     body { font-family: Arial, sans-serif; margin: 20px; background: #0b1021; color: #e8ecf5; }
     h1 { margin-bottom: 0; }
     .summary { margin: 0 0 20px; color: #9fb3ff; }
-    .report-nav { margin: 10px 0 16px; display: flex; gap: 14px; flex-wrap: wrap; }
-    .report-nav a { color: #9fb3ff; text-decoration: none; font-weight: 600; }
-    .report-nav a:hover { text-decoration: underline; }
-    .page { background: #11172d; border: 1px solid #1f2a45; border-radius: 8px; padding: 16px; margin-bottom: 18px; }
-    .page h2 { margin: 0 0 6px; font-size: 18px; }
-    .counts { font-size: 13px; margin-bottom: 10px; }
-    .links { list-style: none; padding: 0; margin: 0; }
-    .links li { border-top: 1px solid #1f2a45; padding: 10px 0; }
-    .links li:first-child { border-top: none; }
-    .links li.ok .url { color: #9ef5a1; }
-    .links li.error .url { color: #ff8a8a; }
-    .links li.skipped .url { color: #ffd27f; }
-    .meta { font-size: 12px; color: #b8c4ff; margin-top: 4px; }
-    .err { color: #ff8a8a; font-size: 13px; margin-top: 4px; }
+    .report-nav { margin: 10px 0 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .report-nav a {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #1f2a45;
+      background: color-mix(in srgb, #11172d 75%, transparent);
+      color: #9fb3ff;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .report-nav a:hover {
+      border-color: color-mix(in srgb, #9fb3ff 40%, #1f2a45);
+      background: color-mix(in srgb, #9fb3ff 16%, #11172d);
+    }
+    .report-link-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 12px;
+      border-radius: 10px;
+      border: 1px solid color-mix(in srgb, #9fb3ff 35%, #1f2a45);
+      background: color-mix(in srgb, #9fb3ff 14%, #11172d);
+      color: #e8ecf5;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .report-link-btn:hover { background: color-mix(in srgb, #9fb3ff 22%, #11172d); }
+    .report-section { margin-bottom: 18px; background: #11172d; border: 1px solid #1f2a45; border-radius: 10px; padding: 14px; }
+    .snapshot-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #1f2a45;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .status-chip.info { color: #8fd5ff; }
+    .status-chip.pass { color: #9ef5a1; }
+    .status-chip.warn { color: #ffd27f; }
+    .status-chip.fail { color: #ff8a8a; }
+    .report-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    .report-table th, .report-table td { border: 1px solid #1f2a45; padding: 8px; text-align: left; }
+    .report-table th { background: #172b4e; }
     a { color: #9fb3ff; }
   </style>
 </head>
 <body>
   <h1>Link check report</h1>
   <p class="summary">${filteredPages.length} pages · ${broken.length} broken links${skippedExternal ? ` · ${skippedExternal} external skipped` : ""}</p>
-  ${renderCrossNav("links")}
-  ${sections || '<p class="summary">No broken links.</p>'}
+  ${renderCrossNav("links/report.html")}
+  <section class="report-section">
+    <div class="snapshot-chips">
+      <span class="status-chip info">${filteredPages.length} Pages</span>
+      <span class="status-chip ${pagesWithBrokenLinks > 0 ? "warn" : "pass"}">${pagesWithBrokenLinks} With broken links</span>
+      <span class="status-chip ${broken.length > 0 ? "fail" : "pass"}">${broken.length} Broken links</span>
+      <span class="status-chip ${skippedExternal > 0 ? "warn" : "pass"}">${skippedExternal} External skipped</span>
+    </div>
+  </section>
+  <section class="report-section">
+    <table class="report-table">
+      <thead>
+        <tr><th>URL</th><th>Broken</th><th>Checked</th><th>Skipped</th><th>Report</th></tr>
+      </thead>
+      <tbody>
+        ${tableRows}
+      </tbody>
+    </table>
+  </section>
+  ${filteredPages.length ? "" : '<p class="summary">No broken links.</p>'}
 </body>
 </html>`;
 
@@ -710,6 +935,9 @@ async function main() {
           isExternal: l.isExternal,
           selector: l.selector,
           text: l.text,
+          headStatus: l.headStatus,
+          headError: l.headError,
+          fallbackUsed: l.fallbackUsed,
         })),
     );
 
@@ -721,11 +949,19 @@ async function main() {
       skippedExternal,
       REPORT_DIR,
     );
+    const { count: pageReportCount, reportPathByUrl } = writeLinkPageReports(
+      pageResults,
+      REPORT_DIR,
+      {
+        brokenOnly: QUIET_MODE,
+      },
+    );
     const htmlPath = writeHtml(
       pageResults,
       broken,
       skippedExternal,
       REPORT_DIR,
+      reportPathByUrl,
       {
         brokenOnly: QUIET_MODE,
       },
@@ -743,12 +979,8 @@ async function main() {
       } else {
         console.log(`\n🚫 Broken links (${broken.length}):`);
         broken.forEach((issue) => {
-          const statusText = issue.status
-            ? `status ${issue.status}`
-            : issue.error || "failed";
-          const scope = issue.isExternal ? "external" : "internal";
           console.log(
-            `- ${issue.pageUrl} → ${issue.linkUrl} (${statusText}, ${scope})`,
+            `- ${issue.pageUrl} → ${issue.linkUrl} (${formatIssueStatusText(issue)})`,
           );
         });
         console.log(`Details saved to ${summaryPath}`);
@@ -756,6 +988,9 @@ async function main() {
     } else {
       console.log(`\n📄 Link check summary (md): ${summaryPath}`);
       console.log(`📄 Link check report (html): ${htmlPath}`);
+      console.log(
+        `📄 Link page reports (html): ${path.join(REPORT_DIR, "pages")} (${pageReportCount} files)`,
+      );
       console.log(`📄 Link data (json): ${jsonPath}`);
     }
 

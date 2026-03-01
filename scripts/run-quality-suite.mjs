@@ -71,9 +71,23 @@ const REPORT_THEME_CSS = `
   .report-page { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .report-header h1 { margin: 0 0 8px; font-size: 30px; line-height: 1.2; }
   .report-subtitle { margin: 0; color: var(--muted); font-size: 14px; }
-  .report-nav { margin-top: 14px; display: flex; gap: 14px; flex-wrap: wrap; }
-  .report-nav a { color: var(--accent); text-decoration: none; font-weight: 600; }
-  .report-nav a:hover { text-decoration: underline; }
+  .report-nav { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .report-nav a {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg-elev-2) 75%, transparent);
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .report-nav a:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev-2));
+  }
   .report-section { margin-top: 20px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
   .report-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-top: 18px; }
   .report-card { background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
@@ -98,6 +112,22 @@ const REPORT_THEME_CSS = `
   .status-chip.fail { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 35%, var(--line)); }
   .status-chip.info { color: var(--info); border-color: color-mix(in srgb, var(--info) 35%, var(--line)); }
   .report-note { margin-top: 14px; color: var(--ok); font-weight: 600; }
+  .report-link-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev-2));
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .report-link-btn:hover {
+    background: color-mix(in srgb, var(--accent) 22%, var(--bg-elev-2));
+  }
 `;
 
 function statusChipHtml(label, tone = "info") {
@@ -271,6 +301,7 @@ const REPORT_MODULES = [
 ];
 
 const REPORT_NAV_MODEL = [
+  { key: "site-home", label: "Home", href: "/" },
   { key: "home", label: "Quality Reports", path: "index.html" },
   ...REPORT_MODULES.map((module) => ({
     key: module.key,
@@ -290,7 +321,14 @@ function buildCrossNavLinks(currentReportPath, options = {}) {
   const reportRoot = options.reportRoot || REPORT_ROOT;
   return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key))
     .map((item) => {
+      if (item.href) {
+        return {
+          ...item,
+          href: item.href,
+        };
+      }
       const target = String(item.path || "").replace(/\\/g, "/");
+      if (!target) return null;
       if (
         item.key !== "home" &&
         !fs.existsSync(path.join(reportRoot, target))
@@ -1245,7 +1283,7 @@ function generateLighthouseSummary(reportDir) {
       const s = run.scores;
       const m = run.metrics || {};
       const link = run.htmlReport
-        ? `<a href="./${escapeHtml(run.htmlReport)}">report</a>`
+        ? `<a class="report-link-btn" href="./${escapeHtml(run.htmlReport)}">report</a>`
         : "report";
       return `<tr>
         <td>${escapeHtml(run.url)}</td>
@@ -1422,7 +1460,7 @@ function createReportIndex(context = {}) {
           <p>${entry.highlight}</p>
           ${statusChipHtml(status.label, status.tone)}
           <div style="margin-top: 10px;">
-          <a href="./${href}">Open</a>
+          <a class="report-link-btn" href="./${href}">Open</a>
           </div>
         </section>
       `;
@@ -1432,6 +1470,7 @@ function createReportIndex(context = {}) {
   const html = `${renderReportShellStart({
     title: "Quality Reports",
     subtitle: headerSubtitle,
+    navLinks: [{ href: "/", label: "Home" }],
   })}
     ${noBrokenLinksFound ? '<p class="report-note">No broken links found.</p>' : ""}
     <section class="report-section">

@@ -17,6 +17,16 @@ const visited = new Set();
 const toVisit = new Set([BASE_URL]);
 const internalLinksMap = new Map(); // targetUrl -> Set(pagesLinkingHere)
 const httpStatusCache = new Map(); // url -> { status, ok }
+const REPORT_NAV_MODEL = [
+  { key: "site-home", label: "Home", href: "/" },
+  { key: "home", label: "Quality Reports", path: "index.html" },
+  { key: "lighthouse", label: "Lighthouse", path: "lighthouse/summary.html" },
+  { key: "pa11y", label: "Accessibility (Pa11y)", path: "pa11y/report.html" },
+  { key: "seo", label: "SEO", path: "seo/report.html" },
+  { key: "links", label: "Link check", path: "links/report.html" },
+  { key: "jsonld", label: "JSON-LD", path: "jsonld/report.html" },
+  { key: "security", label: "Security", path: "security/report.html" },
+];
 
 function parseArgs(argv) {
   const opts = {};
@@ -132,36 +142,33 @@ function makeIssue(pageUrl, severity, code, message, extra = {}) {
   return { pageUrl, severity, code, message, ...extra };
 }
 
-function renderCrossNav(currentKey) {
-  const links = [
-    { key: "home", label: "Quality Reports", href: "../index.html" },
-    {
-      key: "lighthouse",
-      label: "Lighthouse",
-      href: "../lighthouse/summary.html",
-    },
-    {
-      key: "pa11y",
-      label: "Accessibility (Pa11y)",
-      href: "../pa11y/report.html",
-    },
-    { key: "seo", label: "SEO", href: "../seo/report.html" },
-    { key: "links", label: "Link check", href: "../links/report.html" },
-    { key: "jsonld", label: "JSON-LD Summary", href: "../jsonld/report.html" },
-    { key: "security", label: "Security", href: "../security/report.html" },
-  ]
-    .filter((link) => {
-      if (link.key === currentKey) return false;
-      const absTarget = path.join(
-        process.cwd(),
-        "reports",
-        link.href.replace("../", ""),
-      );
-      return fs.existsSync(absTarget);
+function buildCrossNavLinks(currentReportPath, options = {}) {
+  const currentFile = String(currentReportPath || "seo/report.html").replace(
+    /\\/g,
+    "/",
+  );
+  const currentDir = path.posix.dirname(currentFile);
+  const excludeKeys = new Set(options.excludeKeys || []);
+  const reportsRoot = path.resolve(REPORT_DIR, "..");
+
+  return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key))
+    .map((item) => {
+      if (item.href) return { ...item, href: item.href };
+      const target = String(item.path || "").replace(/\\/g, "/");
+      if (!target) return null;
+      const absTarget = path.join(reportsRoot, target);
+      if (!fs.existsSync(absTarget)) return null;
+      const rel = path.posix.relative(currentDir, target);
+      return { ...item, href: rel || "./" };
     })
+    .filter(Boolean);
+}
+
+function renderCrossNav(currentReportPath, options = {}) {
+  const links = buildCrossNavLinks(currentReportPath, options)
     .map(
       (link) =>
-        `<a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`,
+        `<a href="${escapeHtml(link.href || "#")}">${escapeHtml(link.label)}</a>`,
     )
     .join("");
   return links ? `<div class="report-nav">${links}</div>` : "";
@@ -511,6 +518,138 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function pageReportFileName(pageUrl, index) {
+  let source = pageUrl;
+  try {
+    const u = new URL(pageUrl);
+    source = `${u.pathname}${u.search}` || u.hostname || pageUrl;
+  } catch {
+    // keep source as provided
+  }
+  const slug = slugify(source) || `page-${index + 1}`;
+  return `${String(index + 1).padStart(3, "0")}-${slug}.html`;
+}
+
+function writeSeoPageReports(urls, issuesByPage, reportDir) {
+  const pagesDir = path.join(reportDir, "pages");
+  fs.rmSync(pagesDir, { recursive: true, force: true });
+  fs.mkdirSync(pagesDir, { recursive: true });
+  const reportPathByUrl = new Map();
+
+  const pageUrls = Array.from(
+    new Set([...urls, ...Array.from(issuesByPage.keys())]),
+  ).sort((a, b) => a.localeCompare(b));
+
+  for (let index = 0; index < pageUrls.length; index += 1) {
+    const pageUrl = pageUrls[index];
+    const issues = issuesByPage.get(pageUrl) || [];
+    const fileName = pageReportFileName(pageUrl, index);
+    const counts = issues.reduce(
+      (acc, issue) => {
+        if (issue.severity === "error") acc.errors += 1;
+        if (issue.severity === "warn") acc.warnings += 1;
+        return acc;
+      },
+      { errors: 0, warnings: 0 },
+    );
+
+    const issueRows = issues.length
+      ? issues
+          .map(
+            (issue) => `<tr>
+              <td>${escapeHtml(issue.code)}</td>
+              <td>${escapeHtml(issue.severity)}</td>
+              <td>${escapeHtml(issue.message)}</td>
+            </tr>`,
+          )
+          .join("\n")
+      : '<tr><td colspan="3">No issues 🎉</td></tr>';
+
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SEO page report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #0b1021; color: #e8ecf5; }
+    h1 { margin-bottom: 0; }
+    .summary { margin: 0 0 20px; color: #9fb3ff; }
+    .report-nav { margin: 10px 0 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .report-nav a {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #1f2a45;
+      background: color-mix(in srgb, #11172d 75%, transparent);
+      color: #9fb3ff;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .report-nav a:hover {
+      border-color: color-mix(in srgb, #9fb3ff 40%, #1f2a45);
+      background: color-mix(in srgb, #9fb3ff 16%, #11172d);
+    }
+    .report-section { margin-bottom: 18px; background: #11172d; border: 1px solid #1f2a45; border-radius: 10px; padding: 14px; }
+    .snapshot-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #1f2a45;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .status-chip.info { color: #8fd5ff; }
+    .status-chip.pass { color: #9ef5a1; }
+    .status-chip.warn { color: #ffd27f; }
+    .status-chip.fail { color: #ff8a8a; }
+    .report-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    .report-table th, .report-table td { border: 1px solid #1f2a45; padding: 8px; text-align: left; }
+    .report-table th { background: #172b4e; }
+  </style>
+</head>
+<body>
+  <h1>SEO page report</h1>
+  <p class="summary">${escapeHtml(pageUrl)}</p>
+  ${renderCrossNav(`seo/pages/${fileName}`)}
+  <section class="report-section">
+    <div class="snapshot-chips">
+      <span class="status-chip info">1 Page</span>
+      <span class="status-chip ${counts.errors > 0 ? "fail" : "pass"}">${counts.errors} Errors</span>
+      <span class="status-chip ${counts.warnings > 0 ? "warn" : "pass"}">${counts.warnings} Warnings</span>
+    </div>
+  </section>
+  <section class="report-section">
+    <table class="report-table">
+      <thead>
+        <tr><th>Code</th><th>Severity</th><th>Message</th></tr>
+      </thead>
+      <tbody>
+        ${issueRows}
+      </tbody>
+    </table>
+  </section>
+</body>
+</html>`;
+
+    fs.writeFileSync(path.join(pagesDir, fileName), html, "utf8");
+    reportPathByUrl.set(pageUrl, `./pages/${fileName}`);
+  }
+
+  return { count: pageUrls.length, reportPathByUrl };
+}
+
 function writeMarkdownReport(urls, issuesByPage, reportDir) {
   const lines = ["# SEO audit report", ""];
   lines.push(`Tested pages: ${urls.length}`);
@@ -542,22 +681,10 @@ function writeMarkdownReport(urls, issuesByPage, reportDir) {
   return summaryPath;
 }
 
-function writeHtmlReport(issuesByPage, reportDir) {
-  const sections = Array.from(issuesByPage.entries())
+function writeHtmlReport(issuesByPage, reportDir, reportPathByUrl = new Map()) {
+  const tableRows = Array.from(issuesByPage.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([pageUrl, issues]) => {
-      const issueItems = issues.length
-        ? issues
-            .map(
-              (issue) => `<li class="${issue.severity}">
-                <div class="code">${escapeHtml(issue.code)}</div>
-                <div>${escapeHtml(issue.message)}</div>
-                <div class="meta">${escapeHtml(issue.severity)}</div>
-              </li>`,
-            )
-            .join("")
-        : '<li class="ok">No issues 🎉</li>';
-
       const counts = issues.reduce(
         (acc, issue) => {
           if (issue.severity === "error") acc.errors += 1;
@@ -566,19 +693,16 @@ function writeHtmlReport(issuesByPage, reportDir) {
         },
         { errors: 0, warnings: 0 },
       );
-
-      return `
-        <section class="page">
-          <h2>${escapeHtml(pageUrl)}</h2>
-          <div class="counts">
-            <span class="error">${counts.errors} errors</span>
-            <span class="warn">${counts.warnings} warnings</span>
-          </div>
-          <ul class="issues">
-            ${issueItems}
-          </ul>
-        </section>
-      `;
+      const reportHref = reportPathByUrl.get(pageUrl);
+      const reportLink = reportHref
+        ? `<a class="report-link-btn" href="${escapeHtml(reportHref)}">report</a>`
+        : "-";
+      return `<tr>
+        <td>${escapeHtml(pageUrl)}</td>
+        <td>${counts.errors}</td>
+        <td>${counts.warnings}</td>
+        <td>${reportLink}</td>
+      </tr>`;
     })
     .join("\n");
 
@@ -588,6 +712,9 @@ function writeHtmlReport(issuesByPage, reportDir) {
   const totalWarnings = Array.from(issuesByPage.values())
     .flat()
     .filter((i) => i.severity === "warn").length;
+  const pagesWithIssues = Array.from(issuesByPage.values()).filter(
+    (issues) => issues.length > 0,
+  ).length;
 
   const html = `<!doctype html>
 <html lang="en">
@@ -598,30 +725,80 @@ function writeHtmlReport(issuesByPage, reportDir) {
     body { font-family: Arial, sans-serif; margin: 20px; background: #0b1021; color: #e8ecf5; }
     h1 { margin-bottom: 0; }
     .summary { margin: 0 0 20px; color: #9fb3ff; }
-    .report-nav { margin: 10px 0 16px; display: flex; gap: 14px; flex-wrap: wrap; }
-    .report-nav a { color: #9fb3ff; text-decoration: none; font-weight: 600; }
-    .report-nav a:hover { text-decoration: underline; }
-    .page { background: #11172d; border: 1px solid #1f2a45; border-radius: 8px; padding: 16px; margin-bottom: 18px; }
-    .page h2 { margin: 0 0 6px; font-size: 18px; }
-    .counts { font-size: 13px; margin-bottom: 10px; }
-    .counts .error { color: #ff8a8a; margin-right: 10px; }
-    .counts .warn { color: #ffd27f; }
-    .issues { list-style: none; padding: 0; margin: 0; }
-    .issues li { border-top: 1px solid #1f2a45; padding: 10px 0; }
-    .issues li:first-child { border-top: none; }
-    .issues li.ok { color: #9ef5a1; font-weight: 600; }
-    .issues li.error .code { color: #ff8a8a; }
-    .issues li.warn .code { color: #ffd27f; }
-    .code { font-weight: 700; }
-    .meta { font-size: 12px; color: #b8c4ff; margin-top: 4px; }
+    .report-nav { margin: 10px 0 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .report-nav a {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #1f2a45;
+      background: color-mix(in srgb, #11172d 75%, transparent);
+      color: #9fb3ff;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .report-nav a:hover {
+      border-color: color-mix(in srgb, #9fb3ff 40%, #1f2a45);
+      background: color-mix(in srgb, #9fb3ff 16%, #11172d);
+    }
+    .report-link-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 12px;
+      border-radius: 10px;
+      border: 1px solid color-mix(in srgb, #9fb3ff 35%, #1f2a45);
+      background: color-mix(in srgb, #9fb3ff 14%, #11172d);
+      color: #e8ecf5;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .report-link-btn:hover { background: color-mix(in srgb, #9fb3ff 22%, #11172d); }
+    .report-section { margin-bottom: 18px; background: #11172d; border: 1px solid #1f2a45; border-radius: 10px; padding: 14px; }
+    .snapshot-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #1f2a45;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .status-chip.info { color: #8fd5ff; }
+    .status-chip.pass { color: #9ef5a1; }
+    .status-chip.warn { color: #ffd27f; }
+    .status-chip.fail { color: #ff8a8a; }
+    .report-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    .report-table th, .report-table td { border: 1px solid #1f2a45; padding: 8px; text-align: left; }
+    .report-table th { background: #172b4e; }
     a { color: #9fb3ff; }
   </style>
 </head>
 <body>
   <h1>SEO audit report</h1>
   <p class="summary">${issuesByPage.size} pages · ${totalErrors} errors · ${totalWarnings} warnings</p>
-  ${renderCrossNav("seo")}
-  ${sections}
+  ${renderCrossNav("seo/report.html")}
+  <section class="report-section">
+    <div class="snapshot-chips">
+      <span class="status-chip info">${issuesByPage.size} Pages</span>
+      <span class="status-chip ${pagesWithIssues > 0 ? "warn" : "pass"}">${pagesWithIssues} With issues</span>
+      <span class="status-chip ${totalErrors > 0 ? "fail" : "pass"}">${totalErrors} Errors</span>
+      <span class="status-chip ${totalWarnings > 0 ? "warn" : "pass"}">${totalWarnings} Warnings</span>
+    </div>
+  </section>
+  <section class="report-section">
+    <table class="report-table">
+      <thead>
+        <tr><th>URL</th><th>Errors</th><th>Warnings</th><th>Report</th></tr>
+      </thead>
+      <tbody>
+        ${tableRows}
+      </tbody>
+    </table>
+  </section>
 </body>
 </html>`;
 
@@ -710,7 +887,12 @@ async function main() {
   fs.writeFileSync(jsonPath, JSON.stringify(allIssues, null, 2), "utf8");
 
   const summaryPath = writeMarkdownReport(urls, issuesByPage, REPORT_DIR);
-  const htmlPath = writeHtmlReport(issuesByPage, REPORT_DIR);
+  const { count: pageReportCount, reportPathByUrl } = writeSeoPageReports(
+    urls,
+    issuesByPage,
+    REPORT_DIR,
+  );
+  const htmlPath = writeHtmlReport(issuesByPage, REPORT_DIR, reportPathByUrl);
   const stats = {
     pagesTested: urls.length,
     errorCount: allIssues.filter((i) => i.severity === "error").length,
@@ -722,6 +904,7 @@ async function main() {
   console.log(`\n📄 SEO report written to:`);
   console.log(`   - ${summaryPath}`);
   console.log(`   - ${htmlPath}`);
+  console.log(`   - ${path.join(REPORT_DIR, "pages")} (${pageReportCount} files)`);
   console.log(`   - ${jsonPath}`);
   console.log(`   - ${statsPath}`);
 

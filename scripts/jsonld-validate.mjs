@@ -212,9 +212,23 @@ const REPORT_THEME_CSS = `
   .report-page { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .report-header h1 { margin: 0 0 8px; font-size: 30px; line-height: 1.2; }
   .report-subtitle { margin: 0; color: var(--muted); font-size: 14px; }
-  .report-nav { margin-top: 14px; display: flex; gap: 14px; flex-wrap: wrap; }
-  .report-nav a { color: var(--accent); text-decoration: none; font-weight: 600; }
-  .report-nav a:hover { text-decoration: underline; }
+  .report-nav { margin: 10px 0 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .report-nav a {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg-elev-2) 75%, transparent);
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .report-nav a:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev-2));
+  }
   .report-section {
     margin-top: 20px;
     background: var(--bg-elev);
@@ -248,6 +262,22 @@ const REPORT_THEME_CSS = `
   .status-chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
   .status-chip.fail { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 35%, var(--line)); }
   .status-chip.info { color: var(--info); border-color: color-mix(in srgb, var(--info) 35%, var(--line)); }
+  .report-link-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev-2));
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .report-link-btn:hover {
+    background: color-mix(in srgb, var(--accent) 22%, var(--bg-elev-2));
+  }
   pre {
     background: #11172d;
     border: 1px solid var(--line);
@@ -264,12 +294,13 @@ function statusChipHtml(label, tone = "info") {
 }
 
 const REPORT_NAV_MODEL = [
+  { key: "site-home", label: "Home", href: "/" },
   { key: "home", label: "Quality Reports", path: "index.html" },
   { key: "lighthouse", label: "Lighthouse", path: "lighthouse/summary.html" },
   { key: "pa11y", label: "Accessibility (Pa11y)", path: "pa11y/report.html" },
   { key: "seo", label: "SEO", path: "seo/report.html" },
   { key: "links", label: "Link check", path: "links/report.html" },
-  { key: "jsonld", label: "JSON-LD Summary", path: "jsonld/report.html" },
+  { key: "jsonld", label: "JSON-LD", path: "jsonld/report.html" },
   { key: "security", label: "Security", path: "security/report.html" },
 ];
 
@@ -283,7 +314,14 @@ function buildCrossNavLinks(currentReportPath, options = {}) {
   const reportsRoot = path.resolve(reportDir, "..");
   return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key))
     .map((item) => {
+      if (item.href) {
+        return {
+          ...item,
+          href: item.href,
+        };
+      }
       const target = String(item.path || "").replace(/\\/g, "/");
+      if (!target) return null;
       const absTarget = path.join(reportsRoot, target);
       if (!fs.existsSync(absTarget)) {
         return null;
@@ -443,10 +481,7 @@ function writeJsonldPageReports(pageResults) {
     const html = `${renderReportShellStart({
       title: "JSON-LD page report",
       subtitle: page.url || page.pagePath || page.file,
-      navLinks: [
-        ...buildCrossNavLinks(`jsonld/pages/${fileName}`),
-        { href: "../report-legacy.html", label: "JSON-LD Legacy" },
-      ],
+      navLinks: buildCrossNavLinks(`jsonld/pages/${fileName}`),
     })}
   <section class="report-section report-card">
     <p style="margin: 0 0 8px;"><strong>File:</strong> ${escapeHtml(page.file)}</p>
@@ -492,7 +527,7 @@ function writeJsonldSummaryReport(pageResults) {
     .map((page) => {
       const label = page.url || page.pagePath || page.file;
       const reportLink = page.detailReportPath
-        ? `<a href="./${escapeHtml(page.detailReportPath)}">report</a>`
+        ? `<a class="report-link-btn" href="./${escapeHtml(page.detailReportPath)}">report</a>`
         : "-";
       const errorTone = Number(page.errorCount) > 0 ? "fail" : "pass";
       const warningTone = Number(page.warningCount) > 0 ? "warn" : "pass";
@@ -511,12 +546,7 @@ function writeJsonldSummaryReport(pageResults) {
   const html = `${renderReportShellStart({
     title: "JSON-LD report",
     subtitle: `${sortedPages.length} pages tested`,
-    navLinks: [
-      ...buildCrossNavLinks("jsonld/report.html", {
-        excludeKeys: ["jsonld"],
-      }),
-      { href: "./report-legacy.html", label: "JSON-LD Legacy" },
-    ],
+    navLinks: buildCrossNavLinks("jsonld/report.html"),
   })}
     <section class="report-section">
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -559,7 +589,6 @@ function writeJsonldTextReport(pageResults, issues) {
     "",
     "Artifacts:",
     "- report.html (summary table with per-page links)",
-    "- report-legacy.html (browseable legacy summary)",
     "- pages/*.html (page-level details and extracted schema)",
     "- issues.json (all issues)",
     "- stats.json (aggregate counts)",
@@ -568,32 +597,11 @@ function writeJsonldTextReport(pageResults, issues) {
   const txtPath = path.join(reportDir, "report.txt");
   fs.writeFileSync(txtPath, `${lines.join("\n")}\n`, "utf8");
 
-  const legacyHtml = `<!doctype html>
-${renderReportShellStart({
-  title: "JSON-LD legacy summary",
-  subtitle: `${pageResults.length} pages tested`,
-  navLinks: buildCrossNavLinks("jsonld/report-legacy.html"),
-})}
-  <section class="report-section">
-    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-      ${statusChipHtml(`${pageResults.length} Pages`, "info")}
-      ${statusChipHtml(`${pagesWithIssues} With issues`, pagesWithIssues > 0 ? "warn" : "pass")}
-      ${statusChipHtml(`${errorCount} Errors`, errorCount > 0 ? "fail" : "pass")}
-      ${statusChipHtml(`${warningCount} Warnings`, warningCount > 0 ? "warn" : "pass")}
-    </div>
-  </section>
-  <section class="report-section">
-    <ul style="margin: 8px 0 0 18px;">
-      <li><a href="./report.html">report.html</a> (summary table with per-page links)</li>
-      <li><a href="./pages/">pages/</a> (page-level details and extracted schema)</li>
-      <li><a href="./issues.json">issues.json</a> (all issues)</li>
-      <li><a href="./stats.json">stats.json</a> (aggregate counts)</li>
-      <li><a href="./report.txt">report.txt</a> (plain text summary)</li>
-    </ul>
-  </section>
-${renderReportShellEnd()}`;
+  // Clean up legacy artifact from older runs.
   const legacyHtmlPath = path.join(reportDir, "report-legacy.html");
-  fs.writeFileSync(legacyHtmlPath, legacyHtml, "utf8");
+  if (fs.existsSync(legacyHtmlPath)) {
+    fs.rmSync(legacyHtmlPath, { force: true });
+  }
 }
 
 async function fetchSchemaJson(url) {

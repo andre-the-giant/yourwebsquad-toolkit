@@ -904,7 +904,9 @@ async function main() {
   console.log(`\n📄 SEO report written to:`);
   console.log(`   - ${summaryPath}`);
   console.log(`   - ${htmlPath}`);
-  console.log(`   - ${path.join(REPORT_DIR, "pages")} (${pageReportCount} files)`);
+  console.log(
+    `   - ${path.join(REPORT_DIR, "pages")} (${pageReportCount} files)`,
+  );
   console.log(`   - ${jsonPath}`);
   console.log(`   - ${statsPath}`);
 

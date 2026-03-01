@@ -387,7 +387,9 @@ function formatStatusText(link) {
 
 function formatIssueStatusText(issue) {
   const scope = issue?.isExternal ? "external" : "internal";
-  const statusCore = issue?.status ? `status ${issue.status}` : issue?.error || "failed";
+  const statusCore = issue?.status
+    ? `status ${issue.status}`
+    : issue?.error || "failed";
   const fallback =
     issue?.fallbackUsed && !issue?.error
       ? `, fallback HEAD ${issue?.headStatus || "failed"} -> GET`

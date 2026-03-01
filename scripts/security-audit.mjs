@@ -103,10 +103,9 @@ const REPORT_NAV_MODEL = [
 ];
 
 function buildCrossNavLinks(currentReportPath, options = {}) {
-  const currentFile = String(currentReportPath || "security/report.html").replace(
-    /\\/g,
-    "/",
-  );
+  const currentFile = String(
+    currentReportPath || "security/report.html",
+  ).replace(/\\/g, "/");
   const currentDir = path.posix.dirname(currentFile);
   const excludeKeys = new Set(options.excludeKeys || []);
   const reportsRoot = path.resolve(REPORT_DIR, "..");

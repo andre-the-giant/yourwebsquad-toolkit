@@ -104,7 +104,7 @@ if (!lhManifest.length) {
 }
 
 // Pa11y section
-body += "### Accessibility (Pa11y)\n";
+body += "### Pa11y\n";
 if (!pa11yStats) {
   body += "- No Pa11y stats found. Expected `pa11y-report/stats.json`.\n\n";
 } else {

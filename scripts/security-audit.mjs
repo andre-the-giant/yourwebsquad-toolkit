@@ -93,9 +93,8 @@ function escapeHtml(str) {
 
 const REPORT_NAV_MODEL = [
   { key: "site-home", label: "Home", href: "/" },
-  { key: "home", label: "Quality Reports", path: "index.html" },
   { key: "lighthouse", label: "Lighthouse", path: "lighthouse/summary.html" },
-  { key: "pa11y", label: "Accessibility (Pa11y)", path: "pa11y/report.html" },
+  { key: "pa11y", label: "Pa11y", path: "pa11y/report.html" },
   { key: "seo", label: "SEO", path: "seo/report.html" },
   { key: "links", label: "Link check", path: "links/report.html" },
   { key: "jsonld", label: "JSON-LD", path: "jsonld/report.html" },
@@ -108,14 +107,11 @@ function buildCrossNavLinks(currentReportPath, options = {}) {
   ).replace(/\\/g, "/");
   const currentDir = path.posix.dirname(currentFile);
   const excludeKeys = new Set(options.excludeKeys || []);
-  const reportsRoot = path.resolve(REPORT_DIR, "..");
   return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key))
     .map((item) => {
       if (item.href) return { ...item, href: item.href };
       const target = String(item.path || "").replace(/\\/g, "/");
       if (!target) return null;
-      const absTarget = path.join(reportsRoot, target);
-      if (!fs.existsSync(absTarget)) return null;
       const rel = path.posix.relative(currentDir, target);
       return { ...item, href: rel || "./" };
     })

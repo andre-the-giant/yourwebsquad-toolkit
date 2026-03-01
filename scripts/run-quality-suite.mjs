@@ -239,7 +239,7 @@ const TEST_CHOICES = [
     value: "all",
   },
   { name: "Lighthouse", value: "lighthouse" },
-  { name: "Accessibility (Pa11y)", value: "pa11y" },
+  { name: "Pa11y", value: "pa11y" },
   { name: "SEO audit", value: "seo" },
   { name: "Link check", value: "links" },
   { name: "JSON-LD validation", value: "jsonld" },
@@ -265,7 +265,7 @@ const REPORT_MODULES = [
   },
   {
     key: "pa11y",
-    name: "Accessibility (Pa11y)",
+    name: "Pa11y",
     path: "pa11y/report.html",
     fallback: "pa11y",
     highlight: "report.html + stats.json",
@@ -302,7 +302,6 @@ const REPORT_MODULES = [
 
 const REPORT_NAV_MODEL = [
   { key: "site-home", label: "Home", href: "/" },
-  { key: "home", label: "Quality Reports", path: "index.html" },
   ...REPORT_MODULES.map((module) => ({
     key: module.key,
     label: module.name,
@@ -318,7 +317,6 @@ function buildCrossNavLinks(currentReportPath, options = {}) {
   );
   const currentDir = path.posix.dirname(currentFile);
   const excludeKeys = new Set(options.excludeKeys || []);
-  const reportRoot = options.reportRoot || REPORT_ROOT;
   return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key))
     .map((item) => {
       if (item.href) {
@@ -329,12 +327,6 @@ function buildCrossNavLinks(currentReportPath, options = {}) {
       }
       const target = String(item.path || "").replace(/\\/g, "/");
       if (!target) return null;
-      if (
-        item.key !== "home" &&
-        !fs.existsSync(path.join(reportRoot, target))
-      ) {
-        return null;
-      }
       const rel = path.posix.relative(currentDir, target);
       return {
         ...item,
@@ -1302,9 +1294,7 @@ function generateLighthouseSummary(reportDir) {
   const html = `${renderReportShellStart({
     title: "Lighthouse Summary",
     subtitle: `${runs.length} pages tested`,
-    navLinks: buildCrossNavLinks("lighthouse/summary.html", {
-      excludeKeys: ["lighthouse"],
-    }),
+    navLinks: buildCrossNavLinks("lighthouse/summary.html"),
   })}
     <section class="report-section">
       <table class="report-table">
@@ -1328,9 +1318,7 @@ function ensureLighthousePlaceholder(reportDir, message) {
   const html = `${renderReportShellStart({
     title: "Lighthouse report not available",
     subtitle: "No Lighthouse summary could be generated for this run.",
-    navLinks: buildCrossNavLinks("lighthouse/summary.html", {
-      excludeKeys: ["lighthouse"],
-    }),
+    navLinks: buildCrossNavLinks("lighthouse/summary.html"),
   })}
     <section class="report-section">
       <p>${escapeHtml(message)}</p>
@@ -1391,7 +1379,7 @@ function createReportIndex(context = {}) {
       if (failures > 0) return { label: `${failures} Issues`, tone: "warn" };
       return { label: "Pass", tone: "pass" };
     }
-    if (entry.name === "Accessibility (Pa11y)") {
+    if (entry.name === "Pa11y") {
       const stats = readJsonIfExists(
         path.join(REPORT_ROOT, "pa11y", "stats.json"),
       );
@@ -1664,7 +1652,7 @@ async function main() {
     }
 
     await runStep(
-      "Accessibility (Pa11y)",
+      "Pa11y",
       async () => {
         const result = await runCommand(
           "node",

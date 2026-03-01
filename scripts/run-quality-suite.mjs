@@ -281,14 +281,20 @@ const REPORT_NAV_MODEL = [
 ];
 
 function buildCrossNavLinks(currentReportPath, options = {}) {
-  const currentFile = String(currentReportPath || "index.html").replace(/\\/g, "/");
+  const currentFile = String(currentReportPath || "index.html").replace(
+    /\\/g,
+    "/",
+  );
   const currentDir = path.posix.dirname(currentFile);
   const excludeKeys = new Set(options.excludeKeys || []);
   const reportRoot = options.reportRoot || REPORT_ROOT;
-  return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key)).map(
-    (item) => {
+  return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key))
+    .map((item) => {
       const target = String(item.path || "").replace(/\\/g, "/");
-      if (item.key !== "home" && !fs.existsSync(path.join(reportRoot, target))) {
+      if (
+        item.key !== "home" &&
+        !fs.existsSync(path.join(reportRoot, target))
+      ) {
         return null;
       }
       const rel = path.posix.relative(currentDir, target);
@@ -296,8 +302,8 @@ function buildCrossNavLinks(currentReportPath, options = {}) {
         ...item,
         href: rel || "./",
       };
-    },
-  ).filter(Boolean);
+    })
+    .filter(Boolean);
 }
 
 function choiceToFlags(choice) {
@@ -1328,14 +1334,19 @@ function createReportIndex(context = {}) {
       return { label: "Clean", tone: "pass" };
     }
     if (entry.name === "Lighthouse") {
-      const stats = readJsonIfExists(path.join(REPORT_ROOT, "lighthouse", "stats.json"));
-      const failures = Number(stats?.assertionFailures || 0) + Number(stats?.runFailures || 0);
+      const stats = readJsonIfExists(
+        path.join(REPORT_ROOT, "lighthouse", "stats.json"),
+      );
+      const failures =
+        Number(stats?.assertionFailures || 0) + Number(stats?.runFailures || 0);
       if (!stats) return { label: "Unknown", tone: "info" };
       if (failures > 0) return { label: `${failures} Issues`, tone: "warn" };
       return { label: "Pass", tone: "pass" };
     }
     if (entry.name === "Accessibility (Pa11y)") {
-      const stats = readJsonIfExists(path.join(REPORT_ROOT, "pa11y", "stats.json"));
+      const stats = readJsonIfExists(
+        path.join(REPORT_ROOT, "pa11y", "stats.json"),
+      );
       if (!stats) return { label: "Unknown", tone: "info" };
       const errors = Number(stats.errorCount || 0);
       const warnings = Number(stats.warningCount || 0);
@@ -1344,7 +1355,9 @@ function createReportIndex(context = {}) {
       return { label: "Pass", tone: "pass" };
     }
     if (entry.name === "SEO") {
-      const stats = readJsonIfExists(path.join(REPORT_ROOT, "seo", "stats.json"));
+      const stats = readJsonIfExists(
+        path.join(REPORT_ROOT, "seo", "stats.json"),
+      );
       if (!stats) return { label: "Unknown", tone: "info" };
       const errors = Number(stats.errorCount || 0);
       const warnings = Number(stats.warningCount || 0);
@@ -1353,7 +1366,9 @@ function createReportIndex(context = {}) {
       return { label: "Pass", tone: "pass" };
     }
     if (entry.name === "JSON-LD") {
-      const stats = readJsonIfExists(path.join(REPORT_ROOT, "jsonld", "stats.json"));
+      const stats = readJsonIfExists(
+        path.join(REPORT_ROOT, "jsonld", "stats.json"),
+      );
       if (!stats) return { label: "Unknown", tone: "info" };
       const errors = Number(stats.errorCount || 0);
       const warnings = Number(stats.warningCount || 0);
@@ -1362,11 +1377,16 @@ function createReportIndex(context = {}) {
       return { label: "Pass", tone: "pass" };
     }
     if (entry.name === "Security") {
-      const stats = readJsonIfExists(path.join(REPORT_ROOT, "security", "stats.json"));
+      const stats = readJsonIfExists(
+        path.join(REPORT_ROOT, "security", "stats.json"),
+      );
       if (!stats) return { label: "Unknown", tone: "info" };
       const findings = Number(stats.findingsTotal || 0);
       if (stats.failed || findings > 0) {
-        return { label: `${findings} Findings`, tone: findings > 0 ? "warn" : "fail" };
+        return {
+          label: `${findings} Findings`,
+          tone: findings > 0 ? "warn" : "fail",
+        };
       }
       return { label: "Pass", tone: "pass" };
     }

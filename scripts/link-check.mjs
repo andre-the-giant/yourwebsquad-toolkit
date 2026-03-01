@@ -388,8 +388,16 @@ function escapeHtml(str) {
 function renderCrossNav(currentKey) {
   const links = [
     { key: "home", label: "Quality Reports", href: "../index.html" },
-    { key: "lighthouse", label: "Lighthouse", href: "../lighthouse/summary.html" },
-    { key: "pa11y", label: "Accessibility (Pa11y)", href: "../pa11y/report.html" },
+    {
+      key: "lighthouse",
+      label: "Lighthouse",
+      href: "../lighthouse/summary.html",
+    },
+    {
+      key: "pa11y",
+      label: "Accessibility (Pa11y)",
+      href: "../pa11y/report.html",
+    },
     { key: "seo", label: "SEO", href: "../seo/report.html" },
     { key: "links", label: "Link check", href: "../links/report.html" },
     { key: "jsonld", label: "JSON-LD Summary", href: "../jsonld/report.html" },
@@ -397,7 +405,11 @@ function renderCrossNav(currentKey) {
   ]
     .filter((link) => {
       if (link.key === currentKey) return false;
-      const absTarget = path.join(process.cwd(), "reports", link.href.replace("../", ""));
+      const absTarget = path.join(
+        process.cwd(),
+        "reports",
+        link.href.replace("../", ""),
+      );
       return fs.existsSync(absTarget);
     })
     .map(

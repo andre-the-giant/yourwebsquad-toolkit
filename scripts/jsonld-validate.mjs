@@ -281,8 +281,8 @@ function buildCrossNavLinks(currentReportPath, options = {}) {
   const currentDir = path.posix.dirname(currentFile);
   const excludeKeys = new Set(options.excludeKeys || []);
   const reportsRoot = path.resolve(reportDir, "..");
-  return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key)).map(
-    (item) => {
+  return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key))
+    .map((item) => {
       const target = String(item.path || "").replace(/\\/g, "/");
       const absTarget = path.join(reportsRoot, target);
       if (!fs.existsSync(absTarget)) {
@@ -293,8 +293,8 @@ function buildCrossNavLinks(currentReportPath, options = {}) {
         ...item,
         href: rel || "./",
       };
-    },
-  ).filter(Boolean);
+    })
+    .filter(Boolean);
 }
 
 function renderReportShellStart({ title, subtitle = "", navLinks = [] }) {

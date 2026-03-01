@@ -46,6 +46,115 @@ const QUIET_MODE = WANT_FULL_OUTPUT
   : !noQuietFlag && !isFalsey(process.env.QUIET);
 const LOG_ROOT = path.join(REPORT_ROOT, "logs");
 
+const REPORT_THEME_CSS = `
+  :root {
+    --bg: #081225;
+    --bg-elev: #0f1d37;
+    --bg-elev-2: #132544;
+    --text: #e6edf9;
+    --muted: #9bb0d1;
+    --line: #24395f;
+    --accent: #78a9ff;
+    --ok: #2dc98d;
+    --warn: #f4c363;
+    --fail: #ff7f7f;
+    --info: #7ec8ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Avenir Next", "Segoe UI", Arial, sans-serif;
+    background: radial-gradient(circle at 15% 0%, #11244a 0, var(--bg) 42%);
+    color: var(--text);
+  }
+  .report-page { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  .report-header h1 { margin: 0 0 8px; font-size: 30px; line-height: 1.2; }
+  .report-subtitle { margin: 0; color: var(--muted); font-size: 14px; }
+  .report-nav { margin-top: 14px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .report-nav a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .report-nav a:hover { text-decoration: underline; }
+  .report-section { margin-top: 20px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .report-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-top: 18px; }
+  .report-card { background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .report-card h2 { margin: 0 0 8px; font-size: 18px; }
+  .report-card p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+  .report-card a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .report-card a:hover { text-decoration: underline; }
+  .report-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .report-table th, .report-table td { border: 1px solid var(--line); padding: 8px; text-align: left; }
+  .report-table th { background: #172b4e; }
+  .status-chip {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .status-chip.pass { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+  .status-chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .status-chip.fail { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 35%, var(--line)); }
+  .status-chip.info { color: var(--info); border-color: color-mix(in srgb, var(--info) 35%, var(--line)); }
+  .report-note { margin-top: 14px; color: var(--ok); font-weight: 600; }
+`;
+
+function statusChipHtml(label, tone = "info") {
+  const allowed = new Set(["pass", "warn", "fail", "info"]);
+  const safeTone = allowed.has(tone) ? tone : "info";
+  return `<span class="status-chip ${safeTone}">${escapeHtml(label)}</span>`;
+}
+
+function renderReportNavLinks(links = []) {
+  const items = Array.isArray(links)
+    ? links
+        .filter((link) => link && link.href)
+        .map(
+          (link) =>
+            `<a href="${escapeHtml(link.href)}">${escapeHtml(link.label || "Link")}</a>`,
+        )
+    : [];
+  if (!items.length) return "";
+  return `<div class="report-nav">${items.join("")}</div>`;
+}
+
+function renderReportShellStart({
+  title,
+  subtitle = "",
+  backHref = "",
+  navLinks = [],
+}) {
+  const nav =
+    renderReportNavLinks(navLinks) ||
+    (backHref
+      ? renderReportNavLinks([
+          { href: backHref, label: "← Back to Quality Reports" },
+        ])
+      : "");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>${REPORT_THEME_CSS}</style>
+</head>
+<body>
+  <main class="report-page">
+    <header class="report-header">
+      <h1>${escapeHtml(title)}</h1>
+      ${subtitle ? `<p class="report-subtitle">${escapeHtml(subtitle)}</p>` : ""}
+      ${nav}
+    </header>`;
+}
+
+function renderReportShellEnd() {
+  return `
+  </main>
+</body>
+</html>`;
+}
+
 function parseCliArgs(args) {
   const options = {};
   for (let i = 0; i < args.length; i += 1) {
@@ -115,6 +224,81 @@ const CHECK_KEYS = [
   "jsonld",
   "security",
 ];
+
+const REPORT_MODULES = [
+  {
+    key: "lighthouse",
+    name: "Lighthouse",
+    path: "lighthouse/summary.html",
+    fallback: "lighthouse",
+    highlight: "Summary + per-page reports",
+  },
+  {
+    key: "pa11y",
+    name: "Accessibility (Pa11y)",
+    path: "pa11y/report.html",
+    fallback: "pa11y",
+    highlight: "report.html + stats.json",
+  },
+  {
+    key: "seo",
+    name: "SEO",
+    path: "seo/report.html",
+    fallback: "seo",
+    highlight: "report.html + issues.json",
+  },
+  {
+    key: "links",
+    name: "Link check",
+    path: "links/report.html",
+    fallback: "links",
+    highlight: "report.html + links.json",
+  },
+  {
+    key: "jsonld",
+    name: "JSON-LD",
+    path: "jsonld/report.html",
+    fallback: "jsonld",
+    highlight: "report.html + stats.json",
+  },
+  {
+    key: "security",
+    name: "Security",
+    path: "security/report.html",
+    fallback: "security",
+    highlight: "report.html + stats.json",
+  },
+];
+
+const REPORT_NAV_MODEL = [
+  { key: "home", label: "Quality Reports", path: "index.html" },
+  ...REPORT_MODULES.map((module) => ({
+    key: module.key,
+    label: module.name,
+    path: module.path,
+    fallback: module.fallback,
+  })),
+];
+
+function buildCrossNavLinks(currentReportPath, options = {}) {
+  const currentFile = String(currentReportPath || "index.html").replace(/\\/g, "/");
+  const currentDir = path.posix.dirname(currentFile);
+  const excludeKeys = new Set(options.excludeKeys || []);
+  const reportRoot = options.reportRoot || REPORT_ROOT;
+  return REPORT_NAV_MODEL.filter((item) => !excludeKeys.has(item.key)).map(
+    (item) => {
+      const target = String(item.path || "").replace(/\\/g, "/");
+      if (item.key !== "home" && !fs.existsSync(path.join(reportRoot, target))) {
+        return null;
+      }
+      const rel = path.posix.relative(currentDir, target);
+      return {
+        ...item,
+        href: rel || "./",
+      };
+    },
+  ).filter(Boolean);
+}
 
 function choiceToFlags(choice) {
   if (choice === "all") {
@@ -698,7 +882,6 @@ function getUrlsFromSitemap(baseUrl) {
     } catch {
       continue;
     }
-    if (!pathname.startsWith("/en") && !pathname.startsWith("/fr")) continue;
     if (!fileExistsForPath(pathname)) continue;
     const target = new URL(pathname, baseUrl).toString();
     urls.add(normalizeUrl(target));
@@ -717,10 +900,6 @@ function extractLocValuesFromXml(xml) {
   return values;
 }
 
-function isLocalePath(pathname) {
-  return pathname.startsWith("/en") || pathname.startsWith("/fr");
-}
-
 function isSameOrigin(candidate, baseUrl) {
   try {
     const a = new URL(candidate);
@@ -733,8 +912,51 @@ function isSameOrigin(candidate, baseUrl) {
 
 async function fetchText(url) {
   const res = await fetch(url);
-  if (!res.ok) return null;
-  return res.text();
+  const contentType = res.headers.get("content-type") || "";
+  const body = await res.text();
+  return {
+    ok: res.ok,
+    status: res.status,
+    statusText: res.statusText,
+    contentType,
+    body,
+  };
+}
+
+function isLikelyBotChallengeResponse(fetchResult) {
+  const status = Number(fetchResult?.status || 0);
+  const body = String(fetchResult?.body || "").toLowerCase();
+  if ([401, 403, 406, 415, 429, 503].includes(status)) return true;
+  return (
+    body.includes("one moment, please") ||
+    body.includes("cf-challenge") ||
+    body.includes("cloudflare")
+  );
+}
+
+function reportSitemapFetchFailure(sitemapUrl, fetchResult, diagnostics) {
+  const key = `${sitemapUrl}|${fetchResult?.status || "error"}`;
+  if (diagnostics?.reported?.has(key)) return;
+  diagnostics?.reported?.add(key);
+
+  if (fetchResult?.error) {
+    console.warn(
+      `⚠️  Could not fetch sitemap ${sitemapUrl}: ${fetchResult.error}`,
+    );
+    return;
+  }
+
+  const contentType = fetchResult?.contentType
+    ? ` (${fetchResult.contentType})`
+    : "";
+  console.warn(
+    `⚠️  Sitemap fetch failed: ${sitemapUrl} -> HTTP ${fetchResult?.status || "unknown"}${contentType}`,
+  );
+  if (isLikelyBotChallengeResponse(fetchResult)) {
+    console.warn(
+      "ℹ️  Remote server may be blocking automated requests (CDN/WAF challenge).",
+    );
+  }
 }
 
 async function loadRemoteSitemapUrls(
@@ -742,17 +964,28 @@ async function loadRemoteSitemapUrls(
   baseUrl,
   seen = new Set(),
   depth = 0,
+  diagnostics = { reported: new Set() },
 ) {
   if (seen.has(sitemapUrl) || depth > 3) return [];
   seen.add(sitemapUrl);
 
-  let xml;
+  let response;
   try {
-    xml = await fetchText(sitemapUrl);
-  } catch {
+    response = await fetchText(sitemapUrl);
+  } catch (error) {
+    reportSitemapFetchFailure(
+      sitemapUrl,
+      { error: error?.message || String(error) },
+      diagnostics,
+    );
     return [];
   }
-  if (!xml) return [];
+  if (!response?.ok) {
+    reportSitemapFetchFailure(sitemapUrl, response, diagnostics);
+    return [];
+  }
+
+  const xml = response.body;
 
   const locValues = extractLocValuesFromXml(xml);
   const pageUrls = [];
@@ -772,11 +1005,11 @@ async function loadRemoteSitemapUrls(
         baseUrl,
         seen,
         depth + 1,
+        diagnostics,
       );
       pageUrls.push(...nested);
       continue;
     }
-    if (!isLocalePath(new URL(absolute).pathname)) continue;
     pageUrls.push(normalizeUrl(absolute));
   }
 
@@ -789,6 +1022,7 @@ async function getUrlsFromRemoteSitemap(baseUrl) {
   );
   const collected = new Set();
   const seenSitemaps = new Set();
+  const diagnostics = { reported: new Set() };
 
   for (const sitemapUrl of candidates) {
     const urls = await loadRemoteSitemapUrls(
@@ -796,6 +1030,7 @@ async function getUrlsFromRemoteSitemap(baseUrl) {
       baseUrl,
       seenSitemaps,
       0,
+      diagnostics,
     );
     for (const url of urls) {
       collected.add(normalizeUrl(url));
@@ -911,6 +1146,18 @@ function formatMs(value) {
   return `${Math.round(value)} ms`;
 }
 
+function lighthouseScoreTone(score) {
+  if (!Number.isFinite(score)) return "info";
+  if (score >= 90) return "pass";
+  if (score >= 50) return "warn";
+  return "fail";
+}
+
+function lighthouseScoreCell(score) {
+  if (!Number.isFinite(score)) return statusChipHtml("-", "info");
+  return statusChipHtml(String(score), lighthouseScoreTone(score));
+}
+
 function generateLighthouseSummary(reportDir) {
   if (!fs.existsSync(reportDir)) return null;
   const files = fs.readdirSync(reportDir);
@@ -982,14 +1229,14 @@ function generateLighthouseSummary(reportDir) {
       const s = run.scores;
       const m = run.metrics || {};
       const link = run.htmlReport
-        ? `<a href="./${run.htmlReport}">report</a>`
+        ? `<a href="./${escapeHtml(run.htmlReport)}">report</a>`
         : "report";
       return `<tr>
-        <td>${run.url}</td>
-        <td>${s.performance ?? "-"}</td>
-        <td>${s.accessibility ?? "-"}</td>
-        <td>${s["best-practices"] ?? "-"}</td>
-        <td>${s.seo ?? "-"}</td>
+        <td>${escapeHtml(run.url)}</td>
+        <td>${lighthouseScoreCell(s.performance)}</td>
+        <td>${lighthouseScoreCell(s.accessibility)}</td>
+        <td>${lighthouseScoreCell(s["best-practices"])}</td>
+        <td>${lighthouseScoreCell(s.seo)}</td>
         <td>${formatBytes(m.htmlSizeBytes)}</td>
         <td>${formatBytes(m.totalLoadedSizeBytes)}</td>
         <td>${formatMs(m.totalLoadTimeMs)}</td>
@@ -998,31 +1245,24 @@ function generateLighthouseSummary(reportDir) {
     })
     .join("\n");
 
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Lighthouse summary</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #0b1021; color: #e8ecf5; margin: 24px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { border: 1px solid #1f2a45; padding: 8px; text-align: left; }
-    th { background: #11172d; }
-    a { color: #9fb3ff; }
-  </style>
-</head>
-<body>
-  <h1>Lighthouse summary</h1>
-  <table>
-    <thead>
-      <tr><th>URL</th><th>Performance</th><th>Accessibility</th><th>Best Practices</th><th>SEO</th><th>HTML size</th><th>Total loaded size</th><th>Total load time</th><th>Report</th></tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
-</body>
-</html>`;
+  const html = `${renderReportShellStart({
+    title: "Lighthouse Summary",
+    subtitle: `${runs.length} pages tested`,
+    navLinks: buildCrossNavLinks("lighthouse/summary.html", {
+      excludeKeys: ["lighthouse"],
+    }),
+  })}
+    <section class="report-section">
+      <table class="report-table">
+        <thead>
+          <tr><th>URL</th><th>Performance</th><th>Accessibility</th><th>Best Practices</th><th>SEO</th><th>HTML size</th><th>Total loaded size</th><th>Total load time</th><th>Report</th></tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </section>
+${renderReportShellEnd()}`;
 
   const htmlPath = path.join(reportDir, "summary.html");
   fs.writeFileSync(htmlPath, html, "utf8");
@@ -1031,101 +1271,145 @@ function generateLighthouseSummary(reportDir) {
 
 function ensureLighthousePlaceholder(reportDir, message) {
   fs.mkdirSync(reportDir, { recursive: true });
-  const html = `<!doctype html>
-<html><body style="font-family: Arial, sans-serif; background:#0b1021; color:#e8ecf5; padding:20px;">
-  <h1>Lighthouse report not available</h1>
-  <p>${message}</p>
-</body></html>`;
+  const html = `${renderReportShellStart({
+    title: "Lighthouse report not available",
+    subtitle: "No Lighthouse summary could be generated for this run.",
+    navLinks: buildCrossNavLinks("lighthouse/summary.html", {
+      excludeKeys: ["lighthouse"],
+    }),
+  })}
+    <section class="report-section">
+      <p>${escapeHtml(message)}</p>
+    </section>
+${renderReportShellEnd()}`;
   const htmlPath = path.join(reportDir, "summary.html");
   fs.writeFileSync(htmlPath, html, "utf8");
   return { htmlPath };
 }
 
-function createReportIndex() {
-  const entries = [
-    {
-      name: "Lighthouse",
-      path: "lighthouse/summary.html",
-      fallback: "lighthouse",
-      highlight: "Summary + per-page reports",
-    },
-    {
-      name: "Accessibility (Pa11y)",
-      path: "pa11y/report.html",
-      fallback: "pa11y",
-      highlight: "report.html + stats.json",
-    },
-    {
-      name: "SEO",
-      path: "seo/report.html",
-      fallback: "seo",
-      highlight: "report.html + issues.json",
-    },
-    {
-      name: "Link check",
-      path: "links/report.html",
-      fallback: "links",
-      highlight: "report.html + links.json",
-    },
-    {
-      name: "JSON-LD",
-      path: "jsonld/report.html",
-      fallback: "jsonld",
-      highlight: "report.html + stats.json",
-    },
-    {
-      name: "Security",
-      path: "security/report.html",
-      fallback: "security",
-      highlight: "report.html + stats.json",
-    },
-  ];
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatTargetLabel(selectedTarget) {
+  const key = String(selectedTarget?.key || "").trim();
+  if (key) {
+    return key.charAt(0).toUpperCase() + key.slice(1);
+  }
+  const name = String(selectedTarget?.name || "").trim();
+  if (name) {
+    return name.split("(")[0].trim() || "Target";
+  }
+  return "Target";
+}
+
+function createReportIndex(context = {}) {
+  const targetLabel = formatTargetLabel(context.selectedTarget);
+  const baseUrl = String(context.baseUrl || "").trim();
+  const headerSubtitle = baseUrl
+    ? `Testing ${targetLabel} - ${baseUrl}`
+    : "Quality report summary";
+  const linksSummary = summarizeLinks(path.join(REPORT_ROOT, "links"));
+  const noBrokenLinksFound =
+    linksSummary && Number(linksSummary.broken || 0) === 0;
+
+  const entries = REPORT_MODULES;
+
+  function resolveEntryStatus(entry) {
+    if (entry.name === "Link check") {
+      const broken = Number(linksSummary?.broken || 0);
+      if (!linksSummary) return { label: "Unknown", tone: "info" };
+      if (broken > 0) return { label: `${broken} Broken`, tone: "fail" };
+      return { label: "Clean", tone: "pass" };
+    }
+    if (entry.name === "Lighthouse") {
+      const stats = readJsonIfExists(path.join(REPORT_ROOT, "lighthouse", "stats.json"));
+      const failures = Number(stats?.assertionFailures || 0) + Number(stats?.runFailures || 0);
+      if (!stats) return { label: "Unknown", tone: "info" };
+      if (failures > 0) return { label: `${failures} Issues`, tone: "warn" };
+      return { label: "Pass", tone: "pass" };
+    }
+    if (entry.name === "Accessibility (Pa11y)") {
+      const stats = readJsonIfExists(path.join(REPORT_ROOT, "pa11y", "stats.json"));
+      if (!stats) return { label: "Unknown", tone: "info" };
+      const errors = Number(stats.errorCount || 0);
+      const warnings = Number(stats.warningCount || 0);
+      if (errors > 0) return { label: `${errors} Errors`, tone: "fail" };
+      if (warnings > 0) return { label: `${warnings} Warnings`, tone: "warn" };
+      return { label: "Pass", tone: "pass" };
+    }
+    if (entry.name === "SEO") {
+      const stats = readJsonIfExists(path.join(REPORT_ROOT, "seo", "stats.json"));
+      if (!stats) return { label: "Unknown", tone: "info" };
+      const errors = Number(stats.errorCount || 0);
+      const warnings = Number(stats.warningCount || 0);
+      if (errors > 0) return { label: `${errors} Errors`, tone: "fail" };
+      if (warnings > 0) return { label: `${warnings} Warnings`, tone: "warn" };
+      return { label: "Pass", tone: "pass" };
+    }
+    if (entry.name === "JSON-LD") {
+      const stats = readJsonIfExists(path.join(REPORT_ROOT, "jsonld", "stats.json"));
+      if (!stats) return { label: "Unknown", tone: "info" };
+      const errors = Number(stats.errorCount || 0);
+      const warnings = Number(stats.warningCount || 0);
+      if (errors > 0) return { label: `${errors} Errors`, tone: "fail" };
+      if (warnings > 0) return { label: `${warnings} Warnings`, tone: "warn" };
+      return { label: "Pass", tone: "pass" };
+    }
+    if (entry.name === "Security") {
+      const stats = readJsonIfExists(path.join(REPORT_ROOT, "security", "stats.json"));
+      if (!stats) return { label: "Unknown", tone: "info" };
+      const findings = Number(stats.findingsTotal || 0);
+      if (stats.failed || findings > 0) {
+        return { label: `${findings} Findings`, tone: findings > 0 ? "warn" : "fail" };
+      }
+      return { label: "Pass", tone: "pass" };
+    }
+    return { label: "Report", tone: "info" };
+  }
 
   const cards = entries
     .filter(
       (entry) =>
-        fs.existsSync(path.join(REPORT_ROOT, entry.path)) ||
-        (entry.fallback &&
-          fs.existsSync(path.join(REPORT_ROOT, entry.fallback))),
+        !(noBrokenLinksFound && entry.name === "Link check") &&
+        (fs.existsSync(path.join(REPORT_ROOT, entry.path)) ||
+          (entry.fallback &&
+            fs.existsSync(path.join(REPORT_ROOT, entry.fallback)))),
     )
     .map((entry) => {
       const href = fs.existsSync(path.join(REPORT_ROOT, entry.path))
         ? entry.path
         : entry.fallback;
+      const status = resolveEntryStatus(entry);
       return `
-        <div class="card">
+        <section class="report-card">
           <h2>${entry.name}</h2>
           <p>${entry.highlight}</p>
+          ${statusChipHtml(status.label, status.tone)}
+          <div style="margin-top: 10px;">
           <a href="./${href}">Open</a>
-        </div>
+          </div>
+        </section>
       `;
     })
     .join("\n");
 
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Quality reports</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #0b1021; color: #e8ecf5; margin: 30px; }
-    h1 { margin-bottom: 8px; }
-    p { color: #9fb3ff; }
-    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 20px; }
-    .card { background: #11172d; border: 1px solid #1f2a45; border-radius: 10px; padding: 16px; }
-    .card h2 { margin: 0 0 6px; }
-    .card p { margin: 0 0 12px; color: #b8c4ff; }
-    a { color: #9fb3ff; font-weight: 600; }
-  </style>
-</head>
-<body>
-  <h1>Quality reports</h1>
-  <p>Browse the HTML reports generated by npm test.</p>
-  <div class="grid">
-    ${cards || "<p>No reports found.</p>"}
-  </div>
-</body>
-</html>`;
+  const html = `${renderReportShellStart({
+    title: "Quality Reports",
+    subtitle: headerSubtitle,
+  })}
+    ${noBrokenLinksFound ? '<p class="report-note">No broken links found.</p>' : ""}
+    <section class="report-section">
+      <div class="report-grid">
+        ${cards || "<p>No reports found.</p>"}
+      </div>
+    </section>
+${renderReportShellEnd()}`;
 
   const indexPath = path.join(REPORT_ROOT, "index.html");
   fs.writeFileSync(indexPath, html, "utf8");
@@ -1206,7 +1490,7 @@ async function main() {
       console.log(`✅ Remote target reachable at ${baseUrl}`);
     }
 
-    console.log("🔎 Discovering site URLs from sitemap (en/fr only)...");
+    console.log("🔎 Discovering site URLs from sitemap...");
     let urls = selectedTarget.usesLocalBuild
       ? getUrlsFromSitemap(baseUrl)
       : await getUrlsFromRemoteSitemap(baseUrl);
@@ -1218,14 +1502,6 @@ async function main() {
       );
       urls = await crawlAllPages(baseUrl);
     }
-    urls = urls.filter((u) => {
-      try {
-        const p = new URL(u).pathname;
-        return isLocalePath(p);
-      } catch {
-        return false;
-      }
-    });
     urls = filterLocationPages(urls);
     if (!urls.length) {
       throw new Error(
@@ -1510,7 +1786,10 @@ async function main() {
       siteServer = null;
     }
 
-    const indexPath = createReportIndex();
+    const indexPath = createReportIndex({
+      selectedTarget,
+      baseUrl,
+    });
     console.log(`📁 Report index created at ${indexPath}`);
     if (lighthouseSummary?.htmlPath) {
       console.log(`📊 Lighthouse summary: ${lighthouseSummary.htmlPath}`);

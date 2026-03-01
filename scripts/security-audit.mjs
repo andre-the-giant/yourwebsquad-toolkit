@@ -91,6 +91,29 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+function renderCrossNav(currentKey) {
+  const links = [
+    { key: "home", label: "Quality Reports", href: "../index.html" },
+    { key: "lighthouse", label: "Lighthouse", href: "../lighthouse/summary.html" },
+    { key: "pa11y", label: "Accessibility (Pa11y)", href: "../pa11y/report.html" },
+    { key: "seo", label: "SEO", href: "../seo/report.html" },
+    { key: "links", label: "Link check", href: "../links/report.html" },
+    { key: "jsonld", label: "JSON-LD Summary", href: "../jsonld/report.html" },
+    { key: "security", label: "Security", href: "../security/report.html" },
+  ]
+    .filter((link) => {
+      if (link.key === currentKey) return false;
+      const absTarget = path.join(process.cwd(), "reports", link.href.replace("../", ""));
+      return fs.existsSync(absTarget);
+    })
+    .map(
+      (link) =>
+        `<a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`,
+    )
+    .join("");
+  return links ? `<div class="report-nav">${links}</div>` : "";
+}
+
 function isLocalOrPrivateHost(hostname) {
   const host = String(hostname || "").toLowerCase();
   if (
@@ -427,6 +450,9 @@ function writeHtmlSummary(baseUrl, observatory, findingsTotal) {
     body { font-family: Arial, sans-serif; margin: 20px; background: #0b1021; color: #e8ecf5; }
     h1 { margin-bottom: 0; }
     .summary { color: #9fb3ff; margin: 0 0 16px; }
+    .report-nav { margin: 10px 0 16px; display: flex; gap: 14px; flex-wrap: wrap; }
+    .report-nav a { color: #9fb3ff; text-decoration: none; font-weight: 600; }
+    .report-nav a:hover { text-decoration: underline; }
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid #1f2a45; padding: 8px; text-align: left; vertical-align: top; }
     th { background: #11172d; }
@@ -445,6 +471,7 @@ function writeHtmlSummary(baseUrl, observatory, findingsTotal) {
 <body>
   <h1>Security audit report</h1>
   <p class="summary">Target: ${escapeHtml(baseUrl)} · Total findings: ${findingsTotal}</p>
+  ${renderCrossNav("security")}
   <table>
     <thead>
       <tr><th>Tool</th><th>Status</th><th>Findings</th><th>Notes</th></tr>

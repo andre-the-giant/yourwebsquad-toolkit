@@ -136,6 +136,29 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+function renderCrossNav(currentKey) {
+  const links = [
+    { key: "home", label: "Quality Reports", href: "../index.html" },
+    { key: "lighthouse", label: "Lighthouse", href: "../lighthouse/summary.html" },
+    { key: "pa11y", label: "Accessibility (Pa11y)", href: "../pa11y/report.html" },
+    { key: "seo", label: "SEO", href: "../seo/report.html" },
+    { key: "links", label: "Link check", href: "../links/report.html" },
+    { key: "jsonld", label: "JSON-LD Summary", href: "../jsonld/report.html" },
+    { key: "security", label: "Security", href: "../security/report.html" },
+  ]
+    .filter((link) => {
+      if (link.key === currentKey) return false;
+      const absTarget = path.join(process.cwd(), "reports", link.href.replace("../", ""));
+      return fs.existsSync(absTarget);
+    })
+    .map(
+      (link) =>
+        `<a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`,
+    )
+    .join("");
+  return links ? `<div class="report-nav">${links}</div>` : "";
+}
+
 function writeMarkdownSummary(pages, reportDir) {
   const lines = ["# Pa11y accessibility report", ""];
   for (const page of pages) {
@@ -211,6 +234,9 @@ function writeHtmlReport(pages, totals, reportDir) {
     body { font-family: Arial, sans-serif; margin: 20px; background: #0b1021; color: #e8ecf5; }
     h1 { margin-bottom: 0; }
     .summary { margin: 0 0 20px; color: #9fb3ff; }
+    .report-nav { margin: 10px 0 16px; display: flex; gap: 14px; flex-wrap: wrap; }
+    .report-nav a { color: #9fb3ff; text-decoration: none; font-weight: 600; }
+    .report-nav a:hover { text-decoration: underline; }
     .page { background: #11172d; border: 1px solid #1f2a45; border-radius: 8px; padding: 16px; margin-bottom: 18px; }
     .page h2 { margin: 0 0 6px; font-size: 18px; }
     .counts { font-size: 13px; margin-bottom: 10px; }
@@ -231,6 +257,7 @@ function writeHtmlReport(pages, totals, reportDir) {
 <body>
   <h1>Pa11y accessibility report</h1>
   <p class="summary">${pages.length} pages · ${totals.errors} errors · ${totals.warnings} warnings</p>
+  ${renderCrossNav("pa11y")}
   ${rows}
 </body>
 </html>`;

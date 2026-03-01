@@ -65,9 +65,21 @@ async function waitForServer(url) {
   await waitOn({ resources: [url], timeout: 20000 });
 }
 
+function resolveCommandForSpawn(cmd) {
+  if (process.platform !== "win32") return cmd;
+  const name = String(cmd || "").toLowerCase();
+  if (name === "npm" || name === "npx") {
+    return `${cmd}.cmd`;
+  }
+  return cmd;
+}
+
 function runCommand(cmd, args, { label = cmd } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: "inherit", shell: true });
+    const child = spawn(resolveCommandForSpawn(cmd), args, {
+      stdio: "inherit",
+      shell: false,
+    });
     child.on("exit", (code) => {
       if (code === 0) return resolve();
       reject(new Error(`${label} exited with code ${code}`));
@@ -78,9 +90,9 @@ function runCommand(cmd, args, { label = cmd } = {}) {
 function startStaticServer(dir, port, { quiet = QUIET_MODE } = {}) {
   const args = ["serve", dir, "-l", String(port)];
   const opts = quiet
-    ? { stdio: "ignore", shell: true }
-    : { stdio: "inherit", shell: true };
-  const child = spawn("npx", args, opts);
+    ? { stdio: "ignore", shell: false }
+    : { stdio: "inherit", shell: false };
+  const child = spawn(resolveCommandForSpawn("npx"), args, opts);
   child.on("exit", (code) => {
     if (code !== null && code !== 0 && !quiet) {
       console.error(`⚠️  Static server exited with code ${code}`);

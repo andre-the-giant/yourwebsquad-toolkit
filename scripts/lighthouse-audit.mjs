@@ -77,10 +77,19 @@ function ensureCleanDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+function resolveCommandForSpawn(cmd) {
+  if (process.platform !== "win32") return cmd;
+  const name = String(cmd || "").toLowerCase();
+  if (name === "npm" || name === "npx") {
+    return `${cmd}.cmd`;
+  }
+  return cmd;
+}
+
 function runCommand(cmd, cmdArgs) {
   return new Promise((resolve) => {
-    const child = spawn(cmd, cmdArgs, {
-      shell: true,
+    const child = spawn(resolveCommandForSpawn(cmd), cmdArgs, {
+      shell: false,
       stdio: QUIET_MODE ? ["ignore", "pipe", "pipe"] : "inherit",
       env: process.env,
     });

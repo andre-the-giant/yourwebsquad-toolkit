@@ -607,6 +607,15 @@ function slugify(value) {
     .replace(/^-+|-+$/g, "");
 }
 
+function resolveCommandForSpawn(cmd) {
+  if (process.platform !== "win32") return cmd;
+  const name = String(cmd || "").toLowerCase();
+  if (name === "npm" || name === "npx") {
+    return `${cmd}.cmd`;
+  }
+  return cmd;
+}
+
 async function runCommand(cmd, args, options = {}) {
   const {
     label = cmd,
@@ -619,8 +628,9 @@ async function runCommand(cmd, args, options = {}) {
     ...spawnOverrides
   } = options;
   const commandLabel = label || cmd;
+  const resolvedCmd = resolveCommandForSpawn(cmd);
   const spawnOptions = {
-    shell: true,
+    shell: false,
     ...spawnOverrides,
     env: { ...process.env, ...customEnv },
   };
@@ -640,7 +650,7 @@ async function runCommand(cmd, args, options = {}) {
   if (!shouldLogToFile && !onLine) {
     spawnOptions.stdio = "inherit";
     return new Promise((resolve, reject) => {
-      const child = spawn(cmd, args, spawnOptions);
+      const child = spawn(resolvedCmd, args, spawnOptions);
       child.on("exit", (code) => {
         if (code === 0 || allowFailure)
           return resolve({ logPath: null, exitCode: code });
@@ -675,7 +685,7 @@ async function runCommand(cmd, args, options = {}) {
 
   return new Promise((resolve, reject) => {
     const outStream = logFile ? fs.createWriteStream(logFile) : null;
-    const child = spawn(cmd, args, spawnOptions);
+    const child = spawn(resolvedCmd, args, spawnOptions);
 
     const handleChunk = (chunk, type) => {
       if (outStream) outStream.write(chunk);
@@ -718,7 +728,7 @@ function startStaticServer(
   { quiet = QUIET_MODE, logName } = {},
 ) {
   const serveArgs = ["serve", dir, "-l", String(port)];
-  const spawnOpts = { shell: true };
+  const spawnOpts = { shell: false };
   let logStream;
 
   if (quiet) {
@@ -734,7 +744,7 @@ function startStaticServer(
     spawnOpts.stdio = "inherit";
   }
 
-  const child = spawn("npx", serveArgs, spawnOpts);
+  const child = spawn(resolveCommandForSpawn("npx"), serveArgs, spawnOpts);
   if (logStream) {
     child.stdout.on("data", (chunk) => logStream.write(chunk));
     child.stderr.on("data", (chunk) => logStream.write(chunk));

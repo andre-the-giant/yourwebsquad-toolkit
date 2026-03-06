@@ -658,11 +658,12 @@ function createProgressRenderer(label) {
   const render = () => {
     if (!lastMessage) return;
     if (!isInteractive) {
-      console.log(`${label} ${lastMessage}`);
+      console.log(label ? `${label} ${lastMessage}` : lastMessage);
       return;
     }
     const frame = SPINNER_FRAMES[spinnerIndex % SPINNER_FRAMES.length];
-    process.stdout.write(`\r\x1b[2K${frame} ${label} ${lastMessage}`);
+    const prefix = label ? `${frame} ${label} ` : `${frame}  `;
+    process.stdout.write(`\r\x1b[2K${prefix}${lastMessage}`);
     rendered = true;
   };
 
@@ -706,7 +707,7 @@ function formatLighthouseProgressMessage(event) {
   const currentLabel = String(current).padStart(width, " ");
   const totalLabel = total > 0 ? String(total) : "?";
   const url = String(event?.url || "").trim();
-  return `[ ${currentLabel} / ${totalLabel} ] assessing${url ? ` ${url}` : ""}`;
+  return `[ ${currentLabel} / ${totalLabel} ]${url ? ` ${url}` : ""}`;
 }
 
 function resolveCommandForSpawn(cmd) {
@@ -1714,7 +1715,7 @@ async function main() {
     await runStep(
       "Lighthouse",
       async () => {
-        const progress = createProgressRenderer("assessing");
+        const progress = createProgressRenderer("");
         let result;
         try {
           result = await runCommand(

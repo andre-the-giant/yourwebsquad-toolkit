@@ -1574,7 +1574,9 @@ async function main() {
       });
       await waitForServer(baseUrl);
       if (siteServer.exitCode !== null) {
-        const logHint = siteServer.logFile ? ` (see ${siteServer.logFile})` : "";
+        const logHint = siteServer.logFile
+          ? ` (see ${siteServer.logFile})`
+          : "";
         throw new Error(
           `Failed to start local site server on ${baseUrl}. Port ${localSitePort} may already be in use${logHint}.`,
         );

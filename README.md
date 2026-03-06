@@ -243,6 +243,7 @@ When Lighthouse is selected in `yws-toolkit quality run`, the generated summary 
 - HTML size (document transfer size)
 - Total loaded size (HTML + all loaded resources transfer size)
 - Total load time
+- Live per-page progress in quiet mode (`➡️  Lighthouse (quiet logging)` then `assessing page X / Y`)
 
 Generated files:
 

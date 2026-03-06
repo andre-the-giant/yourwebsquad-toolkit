@@ -45,6 +45,8 @@ const QUIET_MODE = WANT_FULL_OUTPUT
   ? false
   : !noQuietFlag && !isFalsey(process.env.QUIET);
 const LOG_ROOT = path.join(REPORT_ROOT, "logs");
+const LIGHTHOUSE_PROGRESS_PREFIX = "__YWS_LIGHTHOUSE_PROGRESS__";
+const SPINNER_FRAMES = ["◐", "◓", "◑", "◒"];
 
 const REPORT_THEME_CSS = `
   :root {
@@ -635,6 +637,76 @@ function slugify(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function parseLighthouseProgressLine(line) {
+  if (!String(line || "").startsWith(LIGHTHOUSE_PROGRESS_PREFIX)) return null;
+  try {
+    return JSON.parse(line.slice(LIGHTHOUSE_PROGRESS_PREFIX.length));
+  } catch {
+    return null;
+  }
+}
+
+function createProgressRenderer(label) {
+  const isInteractive = Boolean(process.stdout.isTTY);
+  let lastMessage = "";
+  let spinnerIndex = 0;
+  let timer = null;
+  let rendered = false;
+
+  const render = () => {
+    if (!lastMessage) return;
+    if (!isInteractive) {
+      console.log(`${label} ${lastMessage}`);
+      return;
+    }
+    const frame = SPINNER_FRAMES[spinnerIndex % SPINNER_FRAMES.length];
+    process.stdout.write(`\r\x1b[2K${frame} ${label} ${lastMessage}`);
+    rendered = true;
+  };
+
+  return {
+    update(message) {
+      lastMessage = message;
+      if (!isInteractive) {
+        render();
+        return;
+      }
+      render();
+      if (!timer) {
+        timer = setInterval(() => {
+          spinnerIndex = (spinnerIndex + 1) % SPINNER_FRAMES.length;
+          render();
+        }, 180);
+        if (typeof timer.unref === "function") {
+          timer.unref();
+        }
+      }
+    },
+    stop() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      if (isInteractive && rendered) {
+        process.stdout.write("\r\x1b[2K");
+      }
+      lastMessage = "";
+      spinnerIndex = 0;
+      rendered = false;
+    },
+  };
+}
+
+function formatLighthouseProgressMessage(event) {
+  const total = Number(event?.total || 0);
+  const current = Number(event?.current || 0);
+  const width = total > 0 ? String(total).length : 1;
+  const currentLabel = String(current).padStart(width, " ");
+  const totalLabel = total > 0 ? String(total) : "?";
+  const url = String(event?.url || "").trim();
+  return `[ ${currentLabel} / ${totalLabel} ] assessing${url ? ` ${url}` : ""}`;
 }
 
 function resolveCommandForSpawn(cmd) {
@@ -1642,27 +1714,41 @@ async function main() {
     await runStep(
       "Lighthouse",
       async () => {
-        const result = await runCommand(
-          "node",
-          [
-            toolkitScriptPath("lighthouse-audit.mjs"),
-            "--base",
-            baseUrl,
-            "--urls-file",
-            urlsFile,
-            "--report-dir",
-            lighthouseReportDir,
-            "--config",
-            path.join(process.cwd(), "lighthouserc.cjs"),
-            QUIET_MODE ? "--quiet" : "",
-          ],
-          {
-            label: "Lighthouse",
-            logName: "lighthouse",
-            allowFailure: true,
-            forceLog: true,
-          },
-        );
+        const progress = createProgressRenderer("assessing");
+        let result;
+        try {
+          result = await runCommand(
+            "node",
+            [
+              toolkitScriptPath("lighthouse-audit.mjs"),
+              "--base",
+              baseUrl,
+              "--urls-file",
+              urlsFile,
+              "--report-dir",
+              lighthouseReportDir,
+              "--config",
+              path.join(process.cwd(), "lighthouserc.cjs"),
+              QUIET_MODE ? "--quiet" : "",
+            ],
+            {
+              label: "Lighthouse",
+              logName: "lighthouse",
+              allowFailure: true,
+              forceLog: true,
+              onLine: QUIET_MODE
+                ? ({ type, line }) => {
+                    if (type !== "stdout") return;
+                    const event = parseLighthouseProgressLine(line);
+                    if (event?.type !== "page-start") return;
+                    progress.update(formatLighthouseProgressMessage(event));
+                  }
+                : undefined,
+            },
+          );
+        } finally {
+          progress.stop();
+        }
         const assertionCount = summarizeLighthouseAssertions(
           lighthouseReportDir,
           result?.logPath,

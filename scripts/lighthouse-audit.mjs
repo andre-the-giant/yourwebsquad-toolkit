@@ -21,6 +21,7 @@ const CONFIG_PATH =
 const QUIET_MODE = Boolean(
   args.quiet || process.env.LHCI_LOG_LEVEL === "silent",
 );
+const LIGHTHOUSE_PROGRESS_PREFIX = "__YWS_LIGHTHOUSE_PROGRESS__";
 
 function parseArgs(argv) {
   const opts = {};
@@ -198,6 +199,10 @@ function evaluateAssertions(jsonFiles, thresholds) {
   return { assertionFailures, failures };
 }
 
+function emitProgress(event) {
+  console.log(`${LIGHTHOUSE_PROGRESS_PREFIX}${JSON.stringify(event)}`);
+}
+
 async function main() {
   const urls = URLS_FILE ? loadUrlsFromFile(URLS_FILE, BASE_URL) : [BASE_URL];
   if (!urls.length) {
@@ -212,6 +217,14 @@ async function main() {
     const url = urls[i];
     const baseName = `${String(i + 1).padStart(3, "0")}-${slugify(new URL(url).pathname || "root")}`;
     const outBase = path.join(REPORT_DIR, baseName);
+    if (QUIET_MODE) {
+      emitProgress({
+        type: "page-start",
+        current: i + 1,
+        total: urls.length,
+        url,
+      });
+    }
     if (!QUIET_MODE) {
       console.log(`Running Lighthouse ${i + 1}/${urls.length}: ${url}`);
     }

@@ -12,7 +12,8 @@ const DEFAULT_REPORT_DIR =
   process.env.LHCI_REPORT_DIR || path.join(process.cwd(), "reports/lighthouse");
 
 const args = parseArgs(process.argv.slice(2));
-const BASE_URL = args.base ?? DEFAULT_BASE_URL;
+const RAW_BASE_URL = args.base ?? DEFAULT_BASE_URL;
+const BASE_URL = preferIpv4Loopback(RAW_BASE_URL);
 const REPORT_DIR = args.reportDir ?? DEFAULT_REPORT_DIR;
 const URLS_FILE = args.urlsFile;
 const CONFIG_PATH =
@@ -60,6 +61,19 @@ function loadUrlsFromFile(file, baseUrl) {
       .filter(Boolean);
   } catch {
     return [];
+  }
+}
+
+function preferIpv4Loopback(url) {
+  try {
+    const u = new URL(url);
+    const host = String(u.hostname || "").toLowerCase();
+    if (host === "localhost" || host === "::1") {
+      u.hostname = "127.0.0.1";
+    }
+    return u.toString();
+  } catch {
+    return url;
   }
 }
 

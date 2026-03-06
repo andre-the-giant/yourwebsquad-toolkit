@@ -757,12 +757,19 @@ function startStaticServer(
   label,
   { quiet = QUIET_MODE, logName } = {},
 ) {
-  const serveArgs = ["serve", dir, "-l", String(port)];
+  const serveArgs = [
+    "serve",
+    "-l",
+    `tcp://127.0.0.1:${port}`,
+    "--no-port-switching",
+    dir,
+  ];
   const spawnOpts = { shell: false };
   let logStream;
+  let logFile = null;
 
   if (quiet) {
-    const logFile = path.join(
+    logFile = path.join(
       LOG_ROOT,
       `${logName || `${slugify(label)}-server`}.log`,
     );
@@ -775,6 +782,7 @@ function startStaticServer(
   }
 
   const child = spawn(resolveCommandForSpawn("npx"), serveArgs, spawnOpts);
+  child.logFile = logFile;
   if (logStream) {
     child.stdout.on("data", (chunk) => logStream.write(chunk));
     child.stderr.on("data", (chunk) => logStream.write(chunk));
@@ -825,6 +833,19 @@ function normalizeUrl(url) {
     u.hash = "";
     // Preserve trailing slashes so discovered URLs stay canonical for
     // projects configured with trailingSlash: "always".
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+function preferIpv4Loopback(url) {
+  try {
+    const u = new URL(url);
+    const host = String(u.hostname || "").toLowerCase();
+    if (host === "localhost" || host === "::1") {
+      u.hostname = "127.0.0.1";
+    }
     return u.toString();
   } catch {
     return url;
@@ -1478,10 +1499,13 @@ async function main() {
   const selectedTarget = await promptForTarget(envValues);
   const selectedChecks = await promptForChecks(selectedTarget);
   const availability = buildCheckAvailability(selectedTarget);
-  const baseUrl = selectedTarget?.baseUrl;
-  if (!baseUrl) {
+  const selectedBaseUrl = selectedTarget?.baseUrl;
+  if (!selectedBaseUrl) {
     throw new Error("No valid base URL resolved for selected target.");
   }
+  const baseUrl = selectedTarget.usesLocalBuild
+    ? preferIpv4Loopback(selectedBaseUrl)
+    : selectedBaseUrl;
 
   console.log(`🧪 Selected: ${selectedChecks.label}`);
   console.log(`🌐 Target: ${selectedTarget.name}`);
@@ -1513,6 +1537,15 @@ async function main() {
   let siteServer = null;
   try {
     if (selectedTarget.usesLocalBuild) {
+      const localSitePort = (() => {
+        try {
+          const port = Number(new URL(baseUrl).port || 0);
+          return port > 0 ? port : SITE_PORT;
+        } catch {
+          return SITE_PORT;
+        }
+      })();
+
       console.log("🏗️  Building site...");
       try {
         await runCommand("npm", ["run", "build"], {
@@ -1535,11 +1568,17 @@ async function main() {
       }
 
       console.log("🚀 Starting local server for build output...");
-      siteServer = startStaticServer("./build", SITE_PORT, "site", {
+      siteServer = startStaticServer("./build", localSitePort, "site", {
         quiet: QUIET_MODE,
         logName: "site-serve",
       });
       await waitForServer(baseUrl);
+      if (siteServer.exitCode !== null) {
+        const logHint = siteServer.logFile ? ` (see ${siteServer.logFile})` : "";
+        throw new Error(
+          `Failed to start local site server on ${baseUrl}. Port ${localSitePort} may already be in use${logHint}.`,
+        );
+      }
       console.log(`✅ Site server ready at ${baseUrl}`);
     } else {
       console.log("🌍 Remote target selected: skipping local build/server.");
@@ -1852,7 +1891,7 @@ async function main() {
       console.log(`📊 Lighthouse summary: ${lighthouseSummary.htmlPath}`);
     }
 
-    const reportUrl = `http://localhost:${REPORT_PORT}/`;
+    const reportUrl = `http://127.0.0.1:${REPORT_PORT}/`;
     console.log(`🌐 Starting report server on ${reportUrl} (Ctrl+C to stop)`);
     const reportServer = startStaticServer(REPORT_ROOT, REPORT_PORT, "report", {
       quiet: QUIET_MODE,

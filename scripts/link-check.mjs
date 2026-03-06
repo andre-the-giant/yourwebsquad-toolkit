@@ -42,6 +42,7 @@ const REPORT_NAV_MODEL = [
   { key: "jsonld", label: "JSON-LD", path: "jsonld/report.html" },
   { key: "security", label: "Security", path: "security/report.html" },
 ];
+const PASSING_STATUS_CODES = new Set([415]);
 
 function parseArgs(argv) {
   const opts = {};
@@ -327,7 +328,12 @@ async function checkLink(url, isExternal) {
     headError = err?.message || "HEAD request failed";
   }
 
-  const shouldFallbackToGet = !res || (!res.ok && res.status >= 400);
+  const isPassingResponse = (response) =>
+    Boolean(response) &&
+    (response.ok || PASSING_STATUS_CODES.has(Number(response.status || 0)));
+
+  const shouldFallbackToGet =
+    !res || (!isPassingResponse(res) && res.status >= 400);
   if (shouldFallbackToGet) {
     fallbackUsed = true;
     try {
@@ -359,7 +365,7 @@ async function checkLink(url, isExternal) {
 
   const result = {
     url: normalized,
-    ok: res.ok,
+    ok: isPassingResponse(res),
     status: res.status,
     isExternal,
     finalUrl: res.url,

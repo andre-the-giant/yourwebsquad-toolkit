@@ -42,7 +42,7 @@ Available commands:
 - `yws-toolkit clean [-- <args>]`
   - Cleans current workspace by removing: `.lighthouseci`, `build`, `reports`, `.astro`, `node_modules`, `package-lock.json`.
 - `yws-toolkit scaffold newpage`
-  - Interactive page generator (segment and non-segment routes, with root-route support for single-locale projects).
+  - Interactive page generator. Single-locale projects scaffold root non-segment routes; multilingual projects scaffold localized segment or non-segment routes.
 - `yws-toolkit quality <run|a11y|seo|links|jsonld|security|comment> [-- <args>]`
   - Runs quality checks from the current project directory.
 - `yws-toolkit update <components|toolkit> [-- <args>]`
@@ -210,6 +210,11 @@ The generator expects boilerplate-style structure in the target project (`proces
 - `src/helpers/segments.js`
 - `src/pages/[lang]/...` for localized routes
 - `src/pages/...` for single-locale projects with `i18n.routing.prefixDefaultLocale: false`
+
+Route selection rules:
+
+- Single-locale + `prefixDefaultLocale: false`: non-segment root routes only (`/slug/`)
+- Multilingual: choose between segment (`/[lang]/[segment]/`) and non-segment (`/[lang]/[slug]/`) routes
 
 It also requires a clean git working tree before making changes.
 

@@ -239,6 +239,12 @@ function supportsRootRoutes({ locales, prefixDefaultLocale }) {
   return locales.length === 1 && prefixDefaultLocale === false;
 }
 
+function resolveRouteScope({ locales, prefixDefaultLocale }) {
+  if (locales.length === 1 && prefixDefaultLocale === false) return "root";
+  if (locales.length > 1) return "localized";
+  return null;
+}
+
 function getAstroPagePath({ routeType, routeScope, slug, segmentKey }) {
   if (routeType === "segment") {
     return path.join(
@@ -643,39 +649,18 @@ async function warnIfHeaderLocaleSwitchIsNotSegmentAware() {
 
 async function promptConfig(localeConfig) {
   const { locales, defaultLocale } = localeConfig;
-  const canUseRootRoutes = supportsRootRoutes(localeConfig);
+  const canUseSegmentRoutes = locales.length > 1;
   const questions = [
     {
       type: "list",
       name: "routeType",
       message: "Route type?",
-      choices: [
-        { name: "Segment-based (/[lang]/[segment]/...)", value: "segment" },
-        { name: "Non-segment (/[lang]/[slug]/)", value: "non-segment" },
-      ],
-    },
-    {
-      type: "list",
-      name: "routeScope",
-      message: "Path scope?",
-      when: () => canUseRootRoutes,
-      default: "root",
-      choices: (answers) => [
-        {
-          name:
-            answers.routeType === "segment"
-              ? "Root (/segment/)"
-              : "Root (/slug/)",
-          value: "root",
-        },
-        {
-          name:
-            answers.routeType === "segment"
-              ? "Localized (/[lang]/[segment]/)"
-              : "Localized (/[lang]/[slug]/)",
-          value: "localized",
-        },
-      ],
+      choices: canUseSegmentRoutes
+        ? [
+            { name: "Segment-based (/[lang]/[segment]/...)", value: "segment" },
+            { name: "Non-segment (/[lang]/[slug]/)", value: "non-segment" },
+          ]
+        : [{ name: "Non-segment", value: "non-segment" }],
     },
     {
       type: "input",
@@ -748,13 +733,25 @@ async function main() {
   ensureCleanGit();
   const localeConfig = await resolveLocaleConfig();
   const { locales, defaultLocale, source, prefixDefaultLocale } = localeConfig;
+  const routeScope = resolveRouteScope(localeConfig);
   logInfo(
     `Locales detected from ${source}: ${locales.join(", ")} (default: ${defaultLocale}, prefixDefaultLocale: ${prefixDefaultLocale})`,
   );
 
+  if (!routeScope) {
+    throw new Error(
+      "Unsupported locale routing configuration. Expected either a single-locale site with prefixDefaultLocale: false, or a multilingual site.",
+    );
+  }
+
   const answers = await promptConfig(localeConfig);
   const { routeType, slug, segmentKey, navPlacement } = answers;
-  const routeScope = answers.routeScope || "localized";
+
+  if (routeType === "segment" && locales.length < 2) {
+    throw new Error(
+      "Segment routes require a multilingual site. Add at least two locales to use localized segments.",
+    );
+  }
 
   const segmentByLocale = {};
   const labelByLocale = {};

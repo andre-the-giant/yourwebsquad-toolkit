@@ -652,17 +652,6 @@ async function promptConfig(localeConfig) {
   const canUseSegmentRoutes = locales.length > 1;
   const questions = [
     {
-      type: "list",
-      name: "routeType",
-      message: "Route type?",
-      choices: canUseSegmentRoutes
-        ? [
-            { name: "Segment-based (/[lang]/[segment]/...)", value: "segment" },
-            { name: "Non-segment (/[lang]/[slug]/)", value: "non-segment" },
-          ]
-        : [{ name: "Non-segment", value: "non-segment" }],
-    },
-    {
       type: "input",
       name: "slug",
       message: "Content slug (used for JSON + page):",
@@ -726,7 +715,23 @@ async function promptConfig(localeConfig) {
     });
   }
 
-  return inquirer.prompt(questions);
+  if (canUseSegmentRoutes) {
+    questions.unshift({
+      type: "list",
+      name: "routeType",
+      message: "Route type?",
+      choices: [
+        { name: "Segment-based (/[lang]/[segment]/...)", value: "segment" },
+        { name: "Non-segment (/[lang]/[slug]/)", value: "non-segment" },
+      ],
+    });
+  }
+
+  const answers = await inquirer.prompt(questions);
+  return {
+    routeType: canUseSegmentRoutes ? answers.routeType : "non-segment",
+    ...answers,
+  };
 }
 
 async function main() {

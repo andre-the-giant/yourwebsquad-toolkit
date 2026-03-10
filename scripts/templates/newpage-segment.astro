@@ -81,10 +81,9 @@ const jsonLd = buildJsonLd({
   sameAs,
   image: content.seo?.image || social.image?.url,
 }, helperConfig);
-const seoPayload = { ...seo, jsonLd };
 ---
 
-<MainLayout seo={seoPayload}>
+<MainLayout props={{ locale, seo: { ...seo, jsonLd } }}>
   <section class="content">
     <h1>{content.seo?.title}</h1>
   </section>

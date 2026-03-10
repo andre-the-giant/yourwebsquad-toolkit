@@ -120,7 +120,9 @@ function extractLocaleConfig(i18nConfig) {
     defaultLocale = locales.includes("en") ? "en" : locales[0];
   }
 
-  return { locales, defaultLocale };
+  const prefixDefaultLocale = i18nConfig.routing?.prefixDefaultLocale !== false;
+
+  return { locales, defaultLocale, prefixDefaultLocale };
 }
 
 async function resolveLocaleConfigFromAstroConfig() {
@@ -186,6 +188,7 @@ async function resolveLocaleConfigFromContent() {
   return {
     locales: uniqueLocales,
     defaultLocale: uniqueLocales.includes("en") ? "en" : uniqueLocales[0],
+    prefixDefaultLocale: true,
     source: "public/content/* fallback",
   };
 }
@@ -200,6 +203,7 @@ async function resolveLocaleConfig() {
   return {
     locales: ["en"],
     defaultLocale: "en",
+    prefixDefaultLocale: true,
     source: "default fallback",
   };
 }
@@ -231,13 +235,17 @@ function getContentPath(locale, slug) {
   return path.join(process.cwd(), "public", "content", locale, `${slug}.json`);
 }
 
-function getAstroPagePath({ routeType, slug, segmentKey }) {
+function supportsRootRoutes({ locales, prefixDefaultLocale }) {
+  return locales.length === 1 && prefixDefaultLocale === false;
+}
+
+function getAstroPagePath({ routeType, routeScope, slug, segmentKey }) {
   if (routeType === "segment") {
     return path.join(
       process.cwd(),
       "src",
       "pages",
-      "[lang]",
+      routeScope === "localized" ? "[lang]" : "",
       `[${segmentKey}Segment]`,
       "index.astro",
     );
@@ -246,35 +254,42 @@ function getAstroPagePath({ routeType, slug, segmentKey }) {
     process.cwd(),
     "src",
     "pages",
-    "[lang]",
+    routeScope === "localized" ? "[lang]" : "",
     slug,
     "index.astro",
   );
 }
 
-function getLocalizedHref({ routeType, locale, slug, segmentValue }) {
+function getPageHref({ routeType, routeScope, locale, slug, segmentValue }) {
   if (routeType === "segment") {
-    return `/${locale}/${segmentValue}/`;
+    return routeScope === "localized"
+      ? `/${locale}/${segmentValue}/`
+      : `/${segmentValue}/`;
   }
-  return `/${locale}/${slug}/`;
+  return routeScope === "localized" ? `/${locale}/${slug}/` : `/${slug}/`;
 }
 
-function getTemplatePath(routeType) {
+function getTemplatePath(routeType, routeScope) {
   const name =
     routeType === "segment"
-      ? "newpage-segment.astro"
-      : "newpage-non-segment.astro";
+      ? routeScope === "localized"
+        ? "newpage-segment.astro"
+        : "newpage-segment-root.astro"
+      : routeScope === "localized"
+        ? "newpage-non-segment.astro"
+        : "newpage-non-segment-root.astro";
   return path.join(toolkitRoot, "scripts", "templates", name);
 }
 
 async function renderTemplate({
   routeType,
+  routeScope,
   slug,
   segmentKey,
   locales,
   defaultLocale,
 }) {
-  const templatePath = getTemplatePath(routeType);
+  const templatePath = getTemplatePath(routeType, routeScope);
   try {
     await fs.access(templatePath);
   } catch (err) {
@@ -320,16 +335,18 @@ async function ensureNotExists(filePath) {
 
 async function writeAstroTemplate({
   routeType,
+  routeScope,
   slug,
   segmentKey,
   locales,
   defaultLocale,
 }) {
-  const target = getAstroPagePath({ routeType, slug, segmentKey });
+  const target = getAstroPagePath({ routeType, routeScope, slug, segmentKey });
   await ensureNotExists(target);
   await fs.mkdir(path.dirname(target), { recursive: true });
   const template = await renderTemplate({
     routeType,
+    routeScope,
     slug,
     segmentKey,
     locales,
@@ -626,6 +643,7 @@ async function warnIfHeaderLocaleSwitchIsNotSegmentAware() {
 
 async function promptConfig(localeConfig) {
   const { locales, defaultLocale } = localeConfig;
+  const canUseRootRoutes = supportsRootRoutes(localeConfig);
   const questions = [
     {
       type: "list",
@@ -634,6 +652,29 @@ async function promptConfig(localeConfig) {
       choices: [
         { name: "Segment-based (/[lang]/[segment]/...)", value: "segment" },
         { name: "Non-segment (/[lang]/[slug]/)", value: "non-segment" },
+      ],
+    },
+    {
+      type: "list",
+      name: "routeScope",
+      message: "Path scope?",
+      when: () => canUseRootRoutes,
+      default: "root",
+      choices: (answers) => [
+        {
+          name:
+            answers.routeType === "segment"
+              ? "Root (/segment/)"
+              : "Root (/slug/)",
+          value: "root",
+        },
+        {
+          name:
+            answers.routeType === "segment"
+              ? "Localized (/[lang]/[segment]/)"
+              : "Localized (/[lang]/[slug]/)",
+          value: "localized",
+        },
       ],
     },
     {
@@ -706,13 +747,14 @@ async function promptConfig(localeConfig) {
 async function main() {
   ensureCleanGit();
   const localeConfig = await resolveLocaleConfig();
-  const { locales, defaultLocale, source } = localeConfig;
+  const { locales, defaultLocale, source, prefixDefaultLocale } = localeConfig;
   logInfo(
-    `Locales detected from ${source}: ${locales.join(", ")} (default: ${defaultLocale})`,
+    `Locales detected from ${source}: ${locales.join(", ")} (default: ${defaultLocale}, prefixDefaultLocale: ${prefixDefaultLocale})`,
   );
 
   const answers = await promptConfig(localeConfig);
   const { routeType, slug, segmentKey, navPlacement } = answers;
+  const routeScope = answers.routeScope || "localized";
 
   const segmentByLocale = {};
   const labelByLocale = {};
@@ -748,8 +790,9 @@ async function main() {
 
   const hrefByLocale = {};
   for (const locale of locales) {
-    hrefByLocale[locale] = getLocalizedHref({
+    hrefByLocale[locale] = getPageHref({
       routeType,
+      routeScope,
       locale,
       slug,
       segmentValue:
@@ -783,6 +826,7 @@ async function main() {
 
   const astroPath = await writeAstroTemplate({
     routeType,
+    routeScope,
     slug,
     segmentKey,
     locales,
@@ -798,6 +842,7 @@ async function main() {
     JSON.stringify(
       {
         routeType,
+        routeScope,
         slug,
         locales,
         defaultLocale,

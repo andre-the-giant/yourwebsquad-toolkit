@@ -2,20 +2,15 @@
 import MainLayout from "@layouts/Main.astro";
 import { createContentHelpers } from "@toolkit/content";
 import { buildJsonLd, buildSeo } from "@toolkit/seo";
-import { defaultLang, defaultSeoValues, hreflangMapDefault } from "../../../../seo.config.mjs";
+import { createSegmentHelpers } from "@toolkit/segments";
+import { defaultLang, defaultSeoValues, hreflangMapDefault } from "../../../seo.config.mjs";
+import { segments } from "../../../segments.config.mjs";
 
-const fallbackLocale = "__DEFAULT_LOCALE__";
-
-export async function getStaticPaths() {
-  const supportedLocales = __LOCALES__;
-  return supportedLocales.map((locale) => ({
-    params: { lang: locale }
-  }));
-}
-
-const supportedLocales = __LOCALES__;
-const { lang } = Astro.params;
-const locale = supportedLocales.includes(lang) ? lang : fallbackLocale;
+const locale = "__DEFAULT_LOCALE__";
+const { getSegment, assertSegmentMatch } = createSegmentHelpers({
+  segments
+});
+const { getContent, getCompany } = createContentHelpers();
 const normalizedSite = (import.meta.env.SITE_URL || "").replace(/\/+$/, "");
 const helperConfig = {
   siteUrl: normalizedSite,
@@ -23,17 +18,30 @@ const helperConfig = {
   defaultLang,
   seoDefaults: defaultSeoValues
 };
-const { getContent, getCompany } = createContentHelpers();
+
+export async function getStaticPaths() {
+  return [
+    {
+      params: {
+        __SEGMENT_KEY__Segment: getSegment(locale, "__SEGMENT_KEY__"),
+      },
+    },
+  ];
+}
+
+const { __SEGMENT_KEY__Segment } = Astro.params;
+assertSegmentMatch(locale, "__SEGMENT_KEY__", __SEGMENT_KEY__Segment);
 
 const content = await getContent(locale, "__SLUG__");
 const company = await getCompany("company");
 const contact = await getCompany("contact");
 const social = await getCompany("social");
 
-const path = `/${locale}/__SLUG__/`;
+const path = `/${__SEGMENT_KEY__Segment}/`;
 const seo = buildSeo({
   locale,
   path,
+  alternates: [{ lang: locale, path }],
   overrides: content.seo,
 }, helperConfig);
 

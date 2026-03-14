@@ -3,6 +3,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "node-html-parser";
+import {
+  normalizeUrl,
+  preferIpv4Loopback,
+} from "../src/quality/common/url.mjs";
 
 const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
 const DEFAULT_REPORT_DIR =
@@ -45,30 +49,6 @@ function parseArgs(argv) {
 
 function isInternal(url) {
   return normalizeUrl(url).startsWith(normalizeUrl(BASE_URL));
-}
-
-function normalizeUrl(url) {
-  try {
-    const u = new URL(url);
-    u.hash = "";
-    // Keep trailing slashes so trailingSlash:"always" projects stay canonical.
-    return u.toString();
-  } catch {
-    return url;
-  }
-}
-
-function preferIpv4Loopback(url) {
-  try {
-    const u = new URL(url);
-    const host = String(u.hostname || "").toLowerCase();
-    if (host === "localhost" || host === "::1") {
-      u.hostname = "127.0.0.1";
-    }
-    return u.toString();
-  } catch {
-    return url;
-  }
 }
 
 function loadUrlsFromFile(file, baseUrl) {

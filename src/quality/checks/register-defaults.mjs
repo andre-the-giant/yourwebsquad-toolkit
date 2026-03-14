@@ -1,0 +1,36 @@
+import { jsonldCheck } from "./jsonld/index.mjs";
+import { lighthouseCheck } from "./lighthouse/index.mjs";
+import { linksCheck } from "./links/index.mjs";
+import { pa11yCheck } from "./pa11y/index.mjs";
+import { securityCheck } from "./security/index.mjs";
+import { seoCheck } from "./seo/index.mjs";
+import {
+  clearQualityCheckRegistry,
+  getQualityCheck,
+  listQualityChecks,
+  registerQualityCheck,
+} from "../core/registry.mjs";
+
+const DEFAULT_CHECKS = [
+  lighthouseCheck,
+  pa11yCheck,
+  seoCheck,
+  linksCheck,
+  jsonldCheck,
+  securityCheck,
+];
+
+export function registerDefaultQualityChecks({ reset = false } = {}) {
+  if (reset) {
+    clearQualityCheckRegistry();
+  }
+
+  for (const check of DEFAULT_CHECKS) {
+    if (!getQualityCheck(check.id)) {
+      registerQualityCheck(check);
+    }
+  }
+
+  return listQualityChecks();
+}
+

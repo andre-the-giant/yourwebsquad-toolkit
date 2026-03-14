@@ -7,6 +7,43 @@ import { fileURLToPath } from "node:url";
 import inquirer from "inquirer";
 import waitOn from "wait-on";
 import { parse } from "node-html-parser";
+import { writeRunSnapshot } from "../src/quality/store/index.mjs";
+import {
+  applyQualityConfigToSelection,
+  loadQualityConfig,
+} from "../src/quality/core/config.mjs";
+import {
+  resolveCheckExecutionPlan,
+  runPlannedQualityChecks,
+} from "../src/quality/core/orchestrator.mjs";
+import {
+  assignDatasetRunId,
+  buildCanonicalDataset,
+  selectedCheckIds,
+} from "../src/quality/core/dataset.mjs";
+import { registerDefaultQualityChecks } from "../src/quality/checks/index.mjs";
+import {
+  normalizeUrl,
+  preferIpv4Loopback,
+} from "../src/quality/common/url.mjs";
+import { collectLighthouseFromReportDir } from "../src/quality/checks/lighthouse/collect.mjs";
+import { normalizeLighthousePayload } from "../src/quality/checks/lighthouse/normalize.mjs";
+import { summarizeLighthousePayload } from "../src/quality/checks/lighthouse/summarize.mjs";
+import { collectPa11yFromReportDir } from "../src/quality/checks/pa11y/collect.mjs";
+import { normalizePa11yPayload } from "../src/quality/checks/pa11y/normalize.mjs";
+import { summarizePa11yPayload } from "../src/quality/checks/pa11y/summarize.mjs";
+import { collectSeoFromReportDir } from "../src/quality/checks/seo/collect.mjs";
+import { normalizeSeoPayload } from "../src/quality/checks/seo/normalize.mjs";
+import { summarizeSeoPayload } from "../src/quality/checks/seo/summarize.mjs";
+import { collectLinksFromReportDir } from "../src/quality/checks/links/collect.mjs";
+import { normalizeLinksPayload } from "../src/quality/checks/links/normalize.mjs";
+import { summarizeLinksPayload } from "../src/quality/checks/links/summarize.mjs";
+import { collectJsonldFromReportDir } from "../src/quality/checks/jsonld/collect.mjs";
+import { normalizeJsonldPayload } from "../src/quality/checks/jsonld/normalize.mjs";
+import { summarizeJsonldPayload } from "../src/quality/checks/jsonld/summarize.mjs";
+import { collectSecurityFromReportDir } from "../src/quality/checks/security/collect.mjs";
+import { normalizeSecurityPayload } from "../src/quality/checks/security/normalize.mjs";
+import { summarizeSecurityPayload } from "../src/quality/checks/security/summarize.mjs";
 
 function npmArgvIncludes(flag) {
   try {
@@ -256,6 +293,14 @@ const CHECK_KEYS = [
   "jsonld",
   "security",
 ];
+const CHECK_NAME_BY_ID = {
+  lighthouse: "Lighthouse",
+  pa11y: "Pa11y",
+  seo: "SEO audit",
+  links: "Link check",
+  jsonld: "JSON-LD validation",
+  security: "Security audit",
+};
 
 const REPORT_MODULES = [
   {
@@ -360,6 +405,10 @@ function choiceToFlags(choice) {
     jsonld: choice === "jsonld",
     security: choice === "security",
   };
+}
+
+function checkDisplayName(checkId) {
+  return CHECK_NAME_BY_ID[checkId] || checkId;
 }
 
 function buildCheckAvailability(selectedTarget) {
@@ -572,43 +621,43 @@ function readJsonIfExists(file) {
 }
 
 function summarizePa11y(reportDir) {
-  const stats = readJsonIfExists(path.join(reportDir, "stats.json"));
-  if (!stats) return null;
-  return { errors: stats.errorCount ?? 0, warnings: stats.warningCount ?? 0 };
+  const raw = collectPa11yFromReportDir(reportDir);
+  const normalized = normalizePa11yPayload(raw, { selected: true });
+  const errors = Number(normalized?.stats?.errorCount || 0);
+  const warnings = Number(normalized?.stats?.warningCount || 0);
+  return { errors, warnings };
 }
 
 function summarizeSeo(reportDir) {
-  const issues = readJsonIfExists(path.join(reportDir, "issues.json"));
-  if (!Array.isArray(issues)) return null;
-  const errors = issues.filter((i) => i.severity === "error").length;
-  const warnings = issues.filter((i) => i.severity === "warn").length;
+  const raw = collectSeoFromReportDir(reportDir);
+  const normalized = normalizeSeoPayload(raw, { selected: true });
+  const errors = Number(normalized?.stats?.errorCount || 0);
+  const warnings = Number(normalized?.stats?.warningCount || 0);
   return { errors, warnings };
 }
 
 function summarizeLinks(reportDir) {
-  const data = readJsonIfExists(path.join(reportDir, "links.json"));
-  if (!data) return null;
-  const broken = Array.isArray(data.broken)
-    ? data.broken.length
-    : Array.isArray(data?.brokenLinks)
-      ? data.brokenLinks.length
-      : 0;
-  const skipped = Number(data.skippedExternal || 0);
+  const raw = collectLinksFromReportDir(reportDir);
+  const normalized = normalizeLinksPayload(raw, { selected: true });
+  const broken = Number(normalized?.stats?.broken || 0);
+  const skipped = Number(normalized?.stats?.skippedExternal || 0);
   return { broken, skipped };
 }
 
 function summarizeSecurity(reportDir) {
-  const stats = readJsonIfExists(path.join(reportDir, "stats.json"));
-  if (!stats) return null;
+  const raw = collectSecurityFromReportDir(reportDir);
+  const normalized = normalizeSecurityPayload(raw, { selected: true });
   return {
-    failed: Boolean(stats.failed),
-    findingsTotal: Number(stats.findingsTotal || 0),
-    tools: stats.tools || {},
+    failed: Boolean(normalized?.failed),
+    findingsTotal: Number(normalized?.stats?.findingsTotal || 0),
+    tools: normalized?.stats?.tools || {},
   };
 }
 
 function summarizeJsonld(reportDir) {
-  const stats = readJsonIfExists(path.join(reportDir, "stats.json"));
+  const raw = collectJsonldFromReportDir(reportDir);
+  const normalized = normalizeJsonldPayload(raw, { selected: true });
+  const stats = normalized?.stats;
   if (!stats) return null;
   return {
     pagesTested: Number(stats.pagesTested || 0),
@@ -617,18 +666,43 @@ function summarizeJsonld(reportDir) {
   };
 }
 
-function summarizeLighthouseAssertions(reportDir, logPath) {
-  const stats = readJsonIfExists(path.join(reportDir, "stats.json"));
-  if (Number.isFinite(stats?.assertionFailures)) {
-    return Number(stats.assertionFailures);
+function collectRawSources() {
+  const sources = [];
+  const direct = [
+    { checkId: "suite", path: path.join(REPORT_ROOT, "urls.json"), name: "urls.json" },
+    { checkId: "suite", path: path.join(REPORT_ROOT, "logs"), name: "logs" },
+    { checkId: "lighthouse", path: path.join(REPORT_ROOT, "lighthouse"), name: "lighthouse" },
+    { checkId: "pa11y", path: path.join(REPORT_ROOT, "pa11y"), name: "pa11y" },
+    { checkId: "seo", path: path.join(REPORT_ROOT, "seo"), name: "seo" },
+    { checkId: "links", path: path.join(REPORT_ROOT, "links"), name: "links" },
+    { checkId: "jsonld", path: path.join(REPORT_ROOT, "jsonld"), name: "jsonld" },
+    { checkId: "security", path: path.join(REPORT_ROOT, "security"), name: "security" },
+  ];
+  for (const entry of direct) {
+    if (fs.existsSync(entry.path)) {
+      sources.push(entry);
+    }
   }
-  if (!logPath || !fs.existsSync(logPath)) return null;
-  const txt = fs.readFileSync(logPath, "utf8");
-  const match = txt.match(/found:\s*(\d+)/i);
-  if (match) {
-    return Number(match[1]);
-  }
-  return null;
+  return sources;
+}
+
+function collectHtmlViewSources() {
+  const entries = [
+    { path: path.join(REPORT_ROOT, "index.html"), name: "index.html" },
+    {
+      path: path.join(REPORT_ROOT, "lighthouse", "summary.html"),
+      name: "lighthouse/summary.html",
+    },
+    { path: path.join(REPORT_ROOT, "pa11y", "report.html"), name: "pa11y/report.html" },
+    { path: path.join(REPORT_ROOT, "seo", "report.html"), name: "seo/report.html" },
+    { path: path.join(REPORT_ROOT, "links", "report.html"), name: "links/report.html" },
+    { path: path.join(REPORT_ROOT, "jsonld", "report.html"), name: "jsonld/report.html" },
+    {
+      path: path.join(REPORT_ROOT, "security", "report.html"),
+      name: "security/report.html",
+    },
+  ];
+  return entries.filter((entry) => fs.existsSync(entry.path));
 }
 
 function slugify(value) {
@@ -894,34 +968,22 @@ function ensureCleanReports() {
       fs.rmSync(full, { recursive: true, force: true });
     }
   }
-  if (fs.existsSync(REPORT_ROOT)) {
-    fs.rmSync(REPORT_ROOT, { recursive: true, force: true });
-  }
   fs.mkdirSync(REPORT_ROOT, { recursive: true });
-}
-
-function normalizeUrl(url) {
-  try {
-    const u = new URL(url);
-    u.hash = "";
-    // Preserve trailing slashes so discovered URLs stay canonical for
-    // projects configured with trailingSlash: "always".
-    return u.toString();
-  } catch {
-    return url;
-  }
-}
-
-function preferIpv4Loopback(url) {
-  try {
-    const u = new URL(url);
-    const host = String(u.hostname || "").toLowerCase();
-    if (host === "localhost" || host === "::1") {
-      u.hostname = "127.0.0.1";
+  for (const target of [
+    "index.html",
+    "urls.json",
+    "logs",
+    "lighthouse",
+    "pa11y",
+    "seo",
+    "links",
+    "jsonld",
+    "security",
+  ]) {
+    const full = path.join(REPORT_ROOT, target);
+    if (fs.existsSync(full)) {
+      fs.rmSync(full, { recursive: true, force: true });
     }
-    return u.toString();
-  } catch {
-    return url;
   }
 }
 
@@ -1568,10 +1630,17 @@ ${renderReportShellEnd()}`;
 }
 
 async function main() {
+  const registeredChecks = registerDefaultQualityChecks();
+  const qualityConfig = await loadQualityConfig(process.cwd());
   const envValues = loadProjectEnvValues();
   const selectedTarget = await promptForTarget(envValues);
-  const selectedChecks = await promptForChecks(selectedTarget);
+  const promptedChecks = await promptForChecks(selectedTarget);
   const availability = buildCheckAvailability(selectedTarget);
+  const selectedChecks = applyQualityConfigToSelection(
+    promptedChecks,
+    qualityConfig,
+    availability,
+  );
   const selectedBaseUrl = selectedTarget?.baseUrl;
   if (!selectedBaseUrl) {
     throw new Error("No valid base URL resolved for selected target.");
@@ -1580,9 +1649,29 @@ async function main() {
     ? preferIpv4Loopback(selectedBaseUrl)
     : selectedBaseUrl;
 
-  console.log(`🧪 Selected: ${selectedChecks.label}`);
+  const selectionForOrder = {
+    ...selectedChecks,
+    jsonld: Boolean(selectedChecks.jsonld && selectedTarget.usesLocalBuild),
+  };
+  const planForLabel = resolveCheckExecutionPlan({
+    selectedChecks: selectionForOrder,
+    qualityConfig,
+    registeredChecks: registeredChecks.map((check) => ({
+      ...check,
+      name: checkDisplayName(check.id),
+      enabled: Boolean(selectionForOrder[check.id]),
+    })),
+  });
+
+  const selectedLabel = planForLabel.length
+    ? planForLabel.map((entry) => entry.id).join(", ")
+    : selectedChecks.label || "none";
+  console.log(`🧪 Selected: ${selectedLabel}`);
   console.log(`🌐 Target: ${selectedTarget.name}`);
   console.log(`🔗 Base URL: ${baseUrl}`);
+  if (qualityConfig.path) {
+    console.log(`⚙️  Quality config loaded: ${qualityConfig.path}`);
+  }
   const unavailableChecks = Object.entries(availability)
     .filter(([, rule]) => rule?.enabled === false)
     .map(([key, rule]) => {
@@ -1684,286 +1773,233 @@ async function main() {
 
     const urlsFile = writeUrlList(urls);
 
-    const failures = [];
-
-    async function runStep(name, fn, enabled = true) {
-      if (!enabled) {
-        console.log(`⏭️  ${name} (skipped)`);
-        return null;
-      }
-      console.log(`➡️  ${name}${QUIET_MODE ? " (quiet logging)" : ""}`);
-      try {
-        const result = await fn();
-        if (result?.summary) {
-          console.log(result.summary);
-        } else {
-          console.log(`✅ ${name} completed`);
-        }
-        if (result?.failed) {
-          failures.push(name);
-        }
-        return result;
-      } catch (err) {
-        failures.push(name);
-        console.error(`❌ ${name} crashed: ${err.message}`);
-        return null;
-      }
-    }
+    const checkRunners = {};
 
     const lighthouseReportDir = path.join(REPORT_ROOT, "lighthouse");
-
-    await runStep(
-      "Lighthouse",
-      async () => {
-        const progress = createProgressRenderer("");
-        let result;
-        try {
-          result = await runCommand(
-            "node",
-            [
-              toolkitScriptPath("lighthouse-audit.mjs"),
-              "--base",
-              baseUrl,
-              "--urls-file",
-              urlsFile,
-              "--report-dir",
-              lighthouseReportDir,
-              "--config",
-              path.join(process.cwd(), "lighthouserc.cjs"),
-              QUIET_MODE ? "--quiet" : "",
-            ],
-            {
-              label: "Lighthouse",
-              logName: "lighthouse",
-              allowFailure: true,
-              forceLog: true,
-              onLine: QUIET_MODE
-                ? ({ type, line }) => {
-                    if (type !== "stdout") return;
-                    const event = parseLighthouseProgressLine(line);
-                    if (event?.type !== "page-start") return;
-                    progress.update(formatLighthouseProgressMessage(event));
-                  }
-                : undefined,
-            },
-          );
-        } finally {
-          progress.stop();
-        }
-        const assertionCount = summarizeLighthouseAssertions(
-          lighthouseReportDir,
-          result?.logPath,
-        );
-        const summary =
-          assertionCount === null
-            ? `Lighthouse completed${result?.logPath ? ` (log: ${result.logPath})` : ""}`
-            : assertionCount > 0
-              ? `Lighthouse assertions: ${assertionCount} (log: ${result.logPath})`
-              : "Lighthouse: 0 assertion failures";
-        const failed =
-          assertionCount > 0 || (result?.exitCode && result.exitCode !== 0);
-        return { summary, failed };
-      },
-      selectedChecks.lighthouse,
-    );
-    let lighthouseSummary = null;
-    if (selectedChecks.lighthouse) {
-      lighthouseSummary = generateLighthouseSummary(
-        path.join(REPORT_ROOT, "lighthouse"),
-      );
-      if (!lighthouseSummary) {
-        lighthouseSummary = ensureLighthousePlaceholder(
-          path.join(REPORT_ROOT, "lighthouse"),
-          "Lighthouse output was not generated (step may have failed).",
-        );
-      }
-    }
-
-    await runStep(
-      "Pa11y",
-      async () => {
-        const result = await runCommand(
+    checkRunners.lighthouse = async () => {
+      const progress = createProgressRenderer("");
+      let result;
+      try {
+        result = await runCommand(
           "node",
           [
-            toolkitScriptPath("pa11y-crawl-and-test.mjs"),
+            toolkitScriptPath("lighthouse-audit.mjs"),
             "--base",
             baseUrl,
             "--urls-file",
             urlsFile,
             "--report-dir",
-            path.join(REPORT_ROOT, "pa11y"),
+            lighthouseReportDir,
+            "--config",
+            path.join(process.cwd(), "lighthouserc.cjs"),
             QUIET_MODE ? "--quiet" : "",
-          ].filter(Boolean),
-          {
-            label: "Pa11y",
-            logName: "pa11y",
-            allowFailure: true,
-            forceLog: true,
-          },
-        );
-        const counts = summarizePa11y(path.join(REPORT_ROOT, "pa11y"));
-        const errors = counts?.errors ?? 0;
-        const warnings = counts?.warnings ?? 0;
-        const summary =
-          errors || warnings
-            ? `Pa11y issues: ${errors} errors${warnings ? `, ${warnings} warnings` : ""}`
-            : "Pa11y issues: 0";
-        const failed =
-          errors > 0 || (result?.exitCode && result.exitCode !== 0);
-        return { summary, failed };
-      },
-      selectedChecks.pa11y,
-    );
-
-    await runStep(
-      "SEO audit",
-      async () => {
-        const result = await runCommand(
-          "node",
-          [
-            toolkitScriptPath("seo-audit.mjs"),
-            "--base",
-            baseUrl,
-            "--urls-file",
-            urlsFile,
-            "--report-dir",
-            path.join(REPORT_ROOT, "seo"),
-            QUIET_MODE ? "--quiet" : "",
-          ].filter(Boolean),
-          {
-            label: "SEO audit",
-            logName: "seo",
-            allowFailure: true,
-            forceLog: true,
-          },
-        );
-        const counts = summarizeSeo(path.join(REPORT_ROOT, "seo"));
-        const errors = counts?.errors ?? 0;
-        const warnings = counts?.warnings ?? 0;
-        const summary =
-          errors || warnings
-            ? `SEO issues: ${errors} errors${warnings ? `, ${warnings} warnings` : ""}`
-            : "SEO issues: 0";
-        const failed =
-          errors > 0 || (result?.exitCode && result.exitCode !== 0);
-        return { summary, failed };
-      },
-      selectedChecks.seo,
-    );
-
-    await runStep(
-      "Link check",
-      async () => {
-        const result = await runCommand(
-          "node",
-          [
-            toolkitScriptPath("link-check.mjs"),
-            "--base",
-            baseUrl,
-            "--urls-file",
-            urlsFile,
-            "--report-dir",
-            path.join(REPORT_ROOT, "links"),
-            QUIET_MODE ? "--quiet" : "",
-          ].filter(Boolean),
-          {
-            label: "Link check",
-            logName: "links",
-            allowFailure: true,
-            forceLog: true,
-          },
-        );
-        const counts = summarizeLinks(path.join(REPORT_ROOT, "links"));
-        const broken = counts?.broken ?? 0;
-        const summary = broken
-          ? `Link check: ${broken} broken link(s)`
-          : "Link check: 0 broken links";
-        const failed =
-          broken > 0 || (result?.exitCode && result.exitCode !== 0);
-        return { summary, failed };
-      },
-      selectedChecks.links,
-    );
-
-    if (selectedChecks.jsonld && !selectedTarget.usesLocalBuild) {
-      console.log(
-        "ℹ️  JSON-LD validation only runs against local build output. Skipping for remote target.",
-      );
-    }
-    await runStep(
-      "JSON-LD validation",
-      async () => {
-        const reportDir = path.join(REPORT_ROOT, "jsonld");
-        const result = await runCommand(
-          "node",
-          [
-            toolkitScriptPath("jsonld-validate.mjs"),
-            "build",
-            `--urls-file=${urlsFile}`,
-            `--report-dir=${reportDir}`,
           ],
           {
-            label: "JSON-LD validation",
-            logName: "jsonld",
+            label: "Lighthouse",
+            logName: "lighthouse",
             allowFailure: true,
             forceLog: true,
-            quiet: QUIET_MODE,
+            onLine: QUIET_MODE
+              ? ({ type, line }) => {
+                  if (type !== "stdout") return;
+                  const event = parseLighthouseProgressLine(line);
+                  if (event?.type !== "page-start") return;
+                  progress.update(formatLighthouseProgressMessage(event));
+                }
+              : undefined,
           },
         );
+      } finally {
+        progress.stop();
+      }
+      const raw = collectLighthouseFromReportDir(lighthouseReportDir, {
+        logPath: result?.logPath,
+      });
+      const normalized = normalizeLighthousePayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      return summarizeLighthousePayload(normalized);
+    };
 
-        const counts = summarizeJsonld(reportDir);
-        const errors = counts?.errors ?? 0;
-        const warnings = counts?.warnings ?? 0;
-        const pages = counts?.pagesTested ?? 0;
-        const failed =
-          errors > 0 || (result?.exitCode && result.exitCode !== 0);
-        const summary = counts
-          ? `JSON-LD: ${errors} errors${warnings ? `, ${warnings} warnings` : ""} across ${pages} page(s) (report: reports/jsonld/report.html)`
-          : failed
-            ? "JSON-LD validation failed before writing stats."
-            : "JSON-LD validation completed (stats unavailable).";
-        return { summary, failed };
+    checkRunners.pa11y = async () => {
+      const result = await runCommand(
+        "node",
+        [
+          toolkitScriptPath("pa11y-crawl-and-test.mjs"),
+          "--base",
+          baseUrl,
+          "--urls-file",
+          urlsFile,
+          "--report-dir",
+          path.join(REPORT_ROOT, "pa11y"),
+          QUIET_MODE ? "--quiet" : "",
+        ].filter(Boolean),
+        {
+          label: "Pa11y",
+          logName: "pa11y",
+          allowFailure: true,
+          forceLog: true,
+        },
+      );
+      const raw = collectPa11yFromReportDir(path.join(REPORT_ROOT, "pa11y"), {
+        logPath: result?.logPath,
+      });
+      const normalized = normalizePa11yPayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      return summarizePa11yPayload(normalized);
+    };
+
+    checkRunners.seo = async () => {
+      const result = await runCommand(
+        "node",
+        [
+          toolkitScriptPath("seo-audit.mjs"),
+          "--base",
+          baseUrl,
+          "--urls-file",
+          urlsFile,
+          "--report-dir",
+          path.join(REPORT_ROOT, "seo"),
+          QUIET_MODE ? "--quiet" : "",
+        ].filter(Boolean),
+        {
+          label: "SEO audit",
+          logName: "seo",
+          allowFailure: true,
+          forceLog: true,
+        },
+      );
+      const raw = collectSeoFromReportDir(path.join(REPORT_ROOT, "seo"), {
+        logPath: result?.logPath,
+      });
+      const normalized = normalizeSeoPayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      return summarizeSeoPayload(normalized);
+    };
+
+    checkRunners.links = async () => {
+      const result = await runCommand(
+        "node",
+        [
+          toolkitScriptPath("link-check.mjs"),
+          "--base",
+          baseUrl,
+          "--urls-file",
+          urlsFile,
+          "--report-dir",
+          path.join(REPORT_ROOT, "links"),
+          QUIET_MODE ? "--quiet" : "",
+        ].filter(Boolean),
+        {
+          label: "Link check",
+          logName: "links",
+          allowFailure: true,
+          forceLog: true,
+        },
+      );
+      const raw = collectLinksFromReportDir(path.join(REPORT_ROOT, "links"), {
+        logPath: result?.logPath,
+      });
+      const normalized = normalizeLinksPayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      return summarizeLinksPayload(normalized);
+    };
+
+    checkRunners.jsonld = async () => {
+      const reportDir = path.join(REPORT_ROOT, "jsonld");
+      const result = await runCommand(
+        "node",
+        [
+          toolkitScriptPath("jsonld-validate.mjs"),
+          "build",
+          `--urls-file=${urlsFile}`,
+          `--report-dir=${reportDir}`,
+        ],
+        {
+          label: "JSON-LD validation",
+          logName: "jsonld",
+          allowFailure: true,
+          forceLog: true,
+          quiet: QUIET_MODE,
+        },
+      );
+      const raw = collectJsonldFromReportDir(reportDir, {
+        logPath: result?.logPath,
+      });
+      const normalized = normalizeJsonldPayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      const summaryData = summarizeJsonldPayload(normalized);
+      return {
+        summary: `${summaryData.summary} (report: reports/jsonld/report.html)`,
+        failed: summaryData.failed,
+      };
+    };
+
+    checkRunners.security = async () => {
+      const result = await runCommand(
+        "node",
+        [
+          toolkitScriptPath("security-audit.mjs"),
+          "--base",
+          baseUrl,
+          "--report-dir",
+          path.join(REPORT_ROOT, "security"),
+          QUIET_MODE ? "--quiet" : "",
+        ].filter(Boolean),
+        {
+          label: "Security audit",
+          logName: "security",
+          allowFailure: true,
+          forceLog: true,
+        },
+      );
+      const raw = collectSecurityFromReportDir(path.join(REPORT_ROOT, "security"), {
+        logPath: result?.logPath,
+      });
+      const normalized = normalizeSecurityPayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      return summarizeSecurityPayload(normalized);
+    };
+
+    const createdAt = new Date().toISOString();
+    const { failures, dataset: pendingDataset } = await runPlannedQualityChecks({
+      plan: planForLabel,
+      runners: checkRunners,
+      targetUsesLocalBuild: selectedTarget.usesLocalBuild,
+      selectedChecks,
+      quietMode: QUIET_MODE,
+      logger: console,
+      buildDataset: ({ failures: checkFailures, context }) =>
+        buildCanonicalDataset({
+          runId: "__pending__",
+          createdAt: context.createdAt,
+          selectedTarget: context.selectedTarget,
+          baseUrl: context.baseUrl,
+          selectedChecks: context.selectedChecks,
+          failures: checkFailures,
+          reportRoot: context.reportRoot,
+          logRoot: context.logRoot,
+        }),
+      datasetContext: {
+        createdAt,
+        selectedTarget,
+        baseUrl,
+        selectedChecks,
+        reportRoot: REPORT_ROOT,
+        logRoot: LOG_ROOT,
       },
-      selectedChecks.jsonld && selectedTarget.usesLocalBuild,
-    );
-
-    await runStep(
-      "Security audit",
-      async () => {
-        const result = await runCommand(
-          "node",
-          [
-            toolkitScriptPath("security-audit.mjs"),
-            "--base",
-            baseUrl,
-            "--report-dir",
-            path.join(REPORT_ROOT, "security"),
-            QUIET_MODE ? "--quiet" : "",
-          ].filter(Boolean),
-          {
-            label: "Security audit",
-            logName: "security",
-            allowFailure: true,
-            forceLog: true,
-          },
-        );
-
-        const security = summarizeSecurity(path.join(REPORT_ROOT, "security"));
-        const findings = security?.findingsTotal ?? 0;
-        const failed = security
-          ? security.failed
-          : Boolean(result?.exitCode && result.exitCode !== 0);
-        const summary = security
-          ? findings > 0
-            ? `Security findings: ${findings}`
-            : "Security findings: 0"
-          : failed
-            ? "Security audit failed before producing stats."
-            : "Security audit completed.";
-        return { summary, failed };
-      },
-      selectedChecks.security,
-    );
+    });
 
     if (siteServer && !siteServer.killed) {
       console.log("🛑 Stopping site server...");
@@ -1971,13 +2007,41 @@ async function main() {
       siteServer = null;
     }
 
-    const indexPath = createReportIndex({
-      selectedTarget,
-      baseUrl,
-    });
-    console.log(`📁 Report index created at ${indexPath}`);
-    if (lighthouseSummary?.htmlPath) {
-      console.log(`📊 Lighthouse summary: ${lighthouseSummary.htmlPath}`);
+    try {
+      const snapshot = writeRunSnapshot({
+        cwd: process.cwd(),
+        meta: {
+          createdAt,
+          target: selectedTarget?.key || selectedTarget?.name || "unknown",
+          baseUrl,
+          checks: selectedCheckIds(selectedChecks),
+          failures,
+        },
+        dataset: pendingDataset,
+        rawSources: collectRawSources(),
+      });
+      const runId = snapshot.runId;
+      const dataset = assignDatasetRunId(pendingDataset, runId);
+      fs.writeFileSync(
+        path.join(snapshot.runDir, "dataset.json"),
+        `${JSON.stringify(dataset, null, 2)}\n`,
+        "utf8",
+      );
+      console.log(`🧾 Run snapshot saved: ${path.join("reports", "runs", runId)}`);
+
+      await runCommand(
+        "node",
+        [toolkitScriptPath("quality-render.mjs"), "--run", runId, "--format", "html"],
+        {
+          label: "Render HTML view",
+          logName: "render-html",
+        },
+      );
+      console.log(
+        `🧩 HTML view rendered from templates: ${path.join("reports", "views", "html", runId)}`,
+      );
+    } catch (snapshotErr) {
+      console.error(`⚠️  Snapshot capture failed: ${snapshotErr.message}`);
     }
 
     const reportUrl = `http://127.0.0.1:${REPORT_PORT}/`;

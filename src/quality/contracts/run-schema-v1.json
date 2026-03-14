@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yourwebsquad-toolkit/schemas/run-schema-v1.json",
+  "title": "Quality Run Dataset v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "runId": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "baseUrl": { "type": "string" },
+        "usesLocalBuild": { "type": "boolean" }
+      },
+      "required": ["baseUrl", "usesLocalBuild"]
+    },
+    "selectedChecks": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "failures": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": { "type": "object" }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "runId",
+    "createdAt",
+    "target",
+    "selectedChecks",
+    "failures",
+    "checks"
+  ]
+}
+

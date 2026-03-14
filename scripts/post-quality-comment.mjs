@@ -2,207 +2,245 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { readLatestRunId, readRun } from "../src/quality/store/index.mjs";
 
 function safeReadJson(filePath) {
   try {
+    if (!fs.existsSync(filePath)) return null;
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch {
     return null;
   }
 }
 
-function formatScore(score) {
-  if (typeof score !== "number") return "–";
-  return `${Math.round(score * 100)}`;
+function toNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
 }
 
-// SEO
-const seoIssues =
-  safeReadJson(path.join("seo-report", "issues.json")) ||
-  safeReadJson(path.join("reports", "seo", "issues.json")) ||
-  [];
-const seoPages = new Set(seoIssues.map((i) => i.pageUrl));
-const seoErrorCount = seoIssues.filter((i) => i.severity === "error").length;
-const seoWarnCount = seoIssues.filter((i) => i.severity === "warn").length;
-
-// Pa11y
-const pa11yStats =
-  safeReadJson(path.join("pa11y-report", "stats.json")) ||
-  safeReadJson(path.join("reports", "pa11y", "stats.json"));
-
-const lhCategories = ["performance", "accessibility", "best-practices", "seo"];
-
-// Lighthouse
-let lhManifest =
-  safeReadJson(path.join("lhci-report", "manifest.json")) ||
-  safeReadJson(path.join(".lighthouseci", "manifest.json")) ||
-  null;
-if (!Array.isArray(lhManifest) || !lhManifest.length) {
-  lhManifest = loadLighthouseRunsFromReportDir(
-    path.join("reports", "lighthouse"),
-  );
-}
-const lhSummary = {};
-for (const cat of lhCategories) {
-  lhSummary[cat] = { minScore: null, minUrl: null };
+function formatDate(value) {
+  const ts = Date.parse(String(value || ""));
+  if (!Number.isFinite(ts)) return "unknown date";
+  return new Date(ts).toISOString();
 }
 
-function loadLighthouseRunsFromReportDir(dir) {
-  if (!fs.existsSync(dir)) return [];
-  const files = fs.readdirSync(dir).filter((file) => file.endsWith(".json"));
-  const runs = [];
-  for (const file of files) {
-    const data = safeReadJson(path.join(dir, file));
-    if (!data?.categories) continue;
-    const summary = {};
-    for (const key of lhCategories) {
-      const score = data.categories?.[key]?.score;
-      if (typeof score === "number") {
-        summary[key] = score;
-      }
-    }
-    runs.push({
-      url: data.finalDisplayedUrl || data.finalUrl || data.requestedUrl || file,
-      summary,
-    });
-  }
-  return runs;
-}
-for (const run of lhManifest) {
-  const url = run.url;
-  const summary = run.summary || {};
-  for (const cat of lhCategories) {
-    const score = summary[cat];
-    if (typeof score !== "number") continue;
-    const current = lhSummary[cat].minScore;
-    if (current === null || score < current) {
-      lhSummary[cat].minScore = score;
-      lhSummary[cat].minUrl = url;
-    }
-  }
+function chunk(lines = []) {
+  return `${lines.join("\n")}\n\n`;
 }
 
-let body = "## 🔍 Automated quality summary\n\n";
-
-// Lighthouse section
-body += "### Lighthouse (LHCI)\n";
-if (!lhManifest.length) {
-  body +=
-    "- No Lighthouse data found. Did LHCI run and write `lhci-report/manifest.json`?\n\n";
-} else {
-  const urlsTested = new Set(lhManifest.map((r) => r.url));
-  body += `- Pages tested: **${urlsTested.size}**\n`;
-  body += "- Minimum scores across tested pages:\n";
-  body += lhCategories
-    .map((cat) => {
-      const { minScore, minUrl } = lhSummary[cat];
-      if (minScore === null) return `  - ${cat}: no data`;
-      return `  - **${cat}**: **${formatScore(minScore)}** / 100 (worst: \`${minUrl}\`)`;
-    })
-    .join("\n");
-  body += "\n\n";
+function loadCanonicalSnapshot(cwd = process.cwd()) {
+  const runId = readLatestRunId(cwd);
+  if (!runId) return null;
+  const run = readRun(runId, cwd);
+  if (!run?.dataset) return null;
+  return {
+    runId,
+    createdAt: run.meta?.createdAt || run.dataset?.createdAt || null,
+    dataset: run.dataset,
+  };
 }
 
-// Pa11y section
-body += "### Pa11y\n";
-if (!pa11yStats) {
-  body += "- No Pa11y stats found. Expected `pa11y-report/stats.json`.\n\n";
-} else {
-  body += `- Pages tested: **${pa11yStats.pagesTested}**\n`;
-  body += `- Issues: **${pa11yStats.errorCount}**\n`;
-  if (typeof pa11yStats.warningCount === "number") {
-    body += `- Warnings: **${pa11yStats.warningCount}**\n`;
-  }
-  body += "\n";
+function loadLegacyData(cwd = process.cwd()) {
+  const base = path.join(cwd, "reports");
+  const seoIssues =
+    safeReadJson(path.join(cwd, "seo-report", "issues.json")) ||
+    safeReadJson(path.join(base, "seo", "issues.json")) ||
+    [];
+  const pa11yStats =
+    safeReadJson(path.join(cwd, "pa11y-report", "stats.json")) ||
+    safeReadJson(path.join(base, "pa11y", "stats.json"));
+  const lighthouseStats =
+    safeReadJson(path.join(base, "lighthouse", "stats.json")) || null;
+
+  return {
+    seoIssues: Array.isArray(seoIssues) ? seoIssues : [],
+    pa11yStats,
+    lighthouseStats,
+  };
 }
 
-// SEO section
-body += "### SEO audit (custom crawler)\n";
-if (!seoIssues.length) {
-  if (seoPages.size === 0) {
-    body += "- No SEO issues and no pages recorded. Did the SEO audit run?\n\n";
-  } else {
-    body += `- Pages tested: **${seoPages.size}**\n`;
-    body += "- ✅ No SEO issues found.\n\n";
-  }
-} else {
-  body += `- Pages tested: **${seoPages.size || "unknown"}**\n`;
-  body += `- Error-level issues: **${seoErrorCount}**\n`;
-  body += `- Warning-level issues: **${seoWarnCount}**\n\n`;
-
+function worstSeoPages(issues = []) {
   const byPage = new Map();
-  for (const issue of seoIssues) {
-    if (!byPage.has(issue.pageUrl)) byPage.set(issue.pageUrl, []);
-    byPage.get(issue.pageUrl).push(issue);
+  for (const issue of issues) {
+    const pageUrl = String(issue?.pageUrl || "").trim();
+    if (!pageUrl) continue;
+    if (!byPage.has(pageUrl)) byPage.set(pageUrl, []);
+    byPage.get(pageUrl).push(issue);
   }
-
-  const worstPages = Array.from(byPage.entries())
-    .map(([url, issues]) => ({
+  return Array.from(byPage.entries())
+    .map(([url, pageIssues]) => ({
       url,
-      errors: issues.filter((i) => i.severity === "error").length,
-      warns: issues.filter((i) => i.severity === "warn").length,
+      errors: pageIssues.filter((i) => i?.severity === "error").length,
+      warns: pageIssues.filter((i) => i?.severity === "warn").length,
     }))
     .sort((a, b) => b.errors - a.errors || b.warns - a.warns)
     .slice(0, 3);
+}
 
-  if (worstPages.length) {
-    body += "Worst pages by SEO issues:\n";
-    for (const p of worstPages) {
-      body += `- \`${p.url}\`: **${p.errors} errors**, **${p.warns} warnings**\n`;
-    }
-    body += "\n";
+function buildBodyFromCanonical(snapshot) {
+  const dataset = snapshot?.dataset || {};
+  const checks = dataset?.checks || {};
+
+  const lines = [];
+  lines.push("## 🔍 Automated quality summary");
+  lines.push("");
+  lines.push(`- Run: \`${snapshot.runId}\``);
+  lines.push(`- Created: ${formatDate(snapshot.createdAt)}`);
+  lines.push(`- Target: **${dataset?.target?.name || dataset?.target?.key || "unknown"}**`);
+  lines.push("");
+
+  const lhStats = checks?.lighthouse?.stats || null;
+  lines.push("### Lighthouse");
+  if (!lhStats) {
+    lines.push("- No Lighthouse stats in canonical dataset.");
+  } else {
+    lines.push(`- Pages tested: **${toNumber(lhStats.urlsTested)}**`);
+    lines.push(`- Assertion failures: **${toNumber(lhStats.assertionFailures)}**`);
+    lines.push(`- Run failures: **${toNumber(lhStats.runFailures)}**`);
   }
-}
+  lines.push("");
 
-body +=
-  "_Full details are available in the workflow artifacts (Lighthouse, Pa11y, SEO reports)._";
+  const pa11yStats = checks?.pa11y?.stats || null;
+  lines.push("### Pa11y");
+  if (!pa11yStats) {
+    lines.push("- No Pa11y stats in canonical dataset.");
+  } else {
+    lines.push(`- Pages tested: **${toNumber(pa11yStats.pagesTested)}**`);
+    lines.push(`- Issues: **${toNumber(pa11yStats.errorCount)}**`);
+    lines.push(`- Warnings: **${toNumber(pa11yStats.warningCount)}**`);
+  }
+  lines.push("");
 
-const { GITHUB_REPOSITORY, GITHUB_EVENT_PATH, GITHUB_TOKEN } = process.env;
-
-if (!GITHUB_TOKEN) {
-  console.error("GITHUB_TOKEN is not set; cannot post PR comment.");
-  process.exit(0);
-}
-
-if (!GITHUB_REPOSITORY || !GITHUB_EVENT_PATH) {
-  console.error(
-    "Missing GITHUB_REPOSITORY or GITHUB_EVENT_PATH; are we running in GitHub Actions?",
+  const seoStats = checks?.seo?.stats || null;
+  const seoIssues = Array.isArray(checks?.seo?.issues) ? checks.seo.issues : [];
+  lines.push("### SEO audit");
+  if (!seoStats && !seoIssues.length) {
+    lines.push("- No SEO data in canonical dataset.");
+  } else {
+    lines.push(
+      `- Pages tested: **${toNumber(seoStats?.pagesTested || 0) || "unknown"}**`,
+    );
+    lines.push(`- Error-level issues: **${toNumber(seoStats?.errorCount || 0)}**`);
+    lines.push(
+      `- Warning-level issues: **${toNumber(seoStats?.warningCount || 0)}**`,
+    );
+    const worst = worstSeoPages(seoIssues);
+    if (worst.length) {
+      lines.push("");
+      lines.push("Worst pages by SEO issues:");
+      for (const page of worst) {
+        lines.push(
+          `- \`${page.url}\`: **${page.errors} errors**, **${page.warns} warnings**`,
+        );
+      }
+    }
+  }
+  lines.push("");
+  lines.push(
+    "_Summary generated from canonical run dataset (`reports/runs/<runId>/dataset.json`)._",
   );
-  process.exit(0);
+
+  return lines.join("\n");
 }
 
-const event = JSON.parse(fs.readFileSync(GITHUB_EVENT_PATH, "utf8"));
-const prNumber = event.pull_request && event.pull_request.number;
+function buildBodyFromLegacy(legacy) {
+  const seoIssues = legacy?.seoIssues || [];
+  const seoPages = new Set(seoIssues.map((issue) => issue?.pageUrl).filter(Boolean));
+  const seoErrorCount = seoIssues.filter((i) => i?.severity === "error").length;
+  const seoWarnCount = seoIssues.filter((i) => i?.severity === "warn").length;
+  const pa11yStats = legacy?.pa11yStats || null;
+  const lhStats = legacy?.lighthouseStats || null;
 
-if (!prNumber) {
-  console.error(
-    "No pull_request number found in event payload. This script should run on pull_request events.",
-  );
-  process.exit(0);
+  const lines = [];
+  lines.push("## 🔍 Automated quality summary");
+  lines.push("");
+  lines.push("_Canonical run dataset not found; using legacy report files._");
+  lines.push("");
+  lines.push("### Lighthouse");
+  if (!lhStats) {
+    lines.push("- No Lighthouse stats found.");
+  } else {
+    lines.push(`- Pages tested: **${toNumber(lhStats.urlsTested)}**`);
+    lines.push(`- Assertion failures: **${toNumber(lhStats.assertionFailures)}**`);
+    lines.push(`- Run failures: **${toNumber(lhStats.runFailures)}**`);
+  }
+  lines.push("");
+  lines.push("### Pa11y");
+  if (!pa11yStats) {
+    lines.push("- No Pa11y stats found.");
+  } else {
+    lines.push(`- Pages tested: **${toNumber(pa11yStats.pagesTested)}**`);
+    lines.push(`- Issues: **${toNumber(pa11yStats.errorCount)}**`);
+    lines.push(`- Warnings: **${toNumber(pa11yStats.warningCount)}**`);
+  }
+  lines.push("");
+  lines.push("### SEO audit");
+  if (!seoIssues.length) {
+    lines.push("- No SEO issues found.");
+  } else {
+    lines.push(`- Pages tested: **${seoPages.size || "unknown"}**`);
+    lines.push(`- Error-level issues: **${seoErrorCount}**`);
+    lines.push(`- Warning-level issues: **${seoWarnCount}**`);
+  }
+  lines.push("");
+  lines.push("_Full details are available in workflow artifacts._");
+  return lines.join("\n");
 }
 
-const [owner, repo] = GITHUB_REPOSITORY.split("/");
+async function main() {
+  const canonical = loadCanonicalSnapshot(process.cwd());
+  const legacy = loadLegacyData(process.cwd());
 
-const apiUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
+  const body = canonical
+    ? buildBodyFromCanonical(canonical)
+    : buildBodyFromLegacy(legacy);
 
-const headers = {
-  Authorization: `Bearer ${GITHUB_TOKEN}`,
-  Accept: "application/vnd.github+json",
-  "Content-Type": "application/json",
-};
+  const { GITHUB_REPOSITORY, GITHUB_EVENT_PATH, GITHUB_TOKEN } = process.env;
+  if (!GITHUB_TOKEN) {
+    console.error("GITHUB_TOKEN is not set; cannot post PR comment.");
+    process.exit(0);
+  }
+  if (!GITHUB_REPOSITORY || !GITHUB_EVENT_PATH) {
+    console.error(
+      "Missing GITHUB_REPOSITORY or GITHUB_EVENT_PATH; are we running in GitHub Actions?",
+    );
+    process.exit(0);
+  }
 
-console.log(`💬 Posting quality summary comment to PR #${prNumber}...`);
+  const event = JSON.parse(fs.readFileSync(GITHUB_EVENT_PATH, "utf8"));
+  const prNumber = event.pull_request && event.pull_request.number;
+  if (!prNumber) {
+    console.error(
+      "No pull_request number found in event payload. This script should run on pull_request events.",
+    );
+    process.exit(0);
+  }
 
-const res = await fetch(apiUrl, {
-  method: "POST",
-  headers,
-  body: JSON.stringify({ body }),
+  const [owner, repo] = GITHUB_REPOSITORY.split("/");
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
+  const headers = {
+    Authorization: `Bearer ${GITHUB_TOKEN}`,
+    Accept: "application/vnd.github+json",
+    "Content-Type": "application/json",
+  };
+
+  console.log(`Posting quality summary comment to PR #${prNumber}...`);
+  const res = await fetch(apiUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ body }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("Failed to post PR comment:", res.status, text);
+    process.exit(0);
+  }
+
+  console.log("Quality summary comment posted.");
+}
+
+main().catch((error) => {
+  console.error(`Unexpected error posting quality summary: ${error?.message || error}`);
+  process.exit(0);
 });
-
-if (!res.ok) {
-  const text = await res.text();
-  console.error("Failed to post PR comment:", res.status, text);
-  process.exit(0);
-}
-
-console.log("✅ Quality summary comment posted.");

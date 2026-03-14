@@ -1,0 +1,85 @@
+:root {
+  --bg: #081225;
+  --bg-elev: #0f1d37;
+  --bg-elev-2: #132544;
+  --text: #e6edf9;
+  --muted: #9bb0d1;
+  --line: #24395f;
+  --accent: #78a9ff;
+  --ok: #2dc98d;
+  --fail: #ff7f7f;
+  --info: #7ec8ff;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "Avenir Next", "Segoe UI", Arial, sans-serif;
+  background: radial-gradient(circle at 15% 0%, #11244a 0, var(--bg) 42%);
+  color: var(--text);
+}
+
+.report-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.report-header h1 {
+  margin: 0 0 6px;
+}
+
+.report-subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.report-nav {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-nav a {
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--accent);
+}
+
+.check-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.check-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.check-card h2 {
+  margin: 0 0 8px;
+}
+
+.check-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.status-chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+}
+
+.status-chip.pass { color: var(--ok); }
+.status-chip.fail { color: var(--fail); }
+.status-chip.info { color: var(--info); }

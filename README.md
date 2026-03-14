@@ -43,7 +43,7 @@ Available commands:
   - Cleans current workspace by removing: `.lighthouseci`, `build`, `reports`, `.astro`, `node_modules`, `package-lock.json`.
 - `yws-toolkit scaffold newpage`
   - Interactive page generator. Single-locale projects scaffold root non-segment routes; multilingual projects scaffold localized segment or non-segment routes.
-- `yws-toolkit quality <run|a11y|seo|links|jsonld|security|comment> [-- <args>]`
+- `yws-toolkit quality <run|a11y|seo|links|jsonld|security|comment|render|compare|list-runs|delete-run|clean-runs|prune-runs> [-- <args>]`
   - Runs quality checks from the current project directory.
 - `yws-toolkit update <components|toolkit> [-- <args>]`
   - Interactive tag-based dependency updater for:
@@ -241,6 +241,50 @@ The test selection prompt adapts to the selected target environment.
 - `staging` / `production` / `--base` (remote):
   - JSON-LD validation: unavailable (local build only)
   - Security audit: available
+
+### Run snapshots
+
+`yws-toolkit quality run` now also writes immutable snapshots:
+
+- Data layer: `reports/runs/<runId>/`
+- Presentation layer: `reports/views/html/<runId>/`
+- Latest pointer: `reports/latest.json`
+
+`reports/index.html` and per-check report folders are still generated for immediate viewing.
+
+### Quality command flags
+
+`yws-toolkit quality render`
+
+- `--run <runId>`: run to render into `reports/` (defaults to latest run).
+- `--format <html|pdf>`: view format to materialize (currently `html` available).
+
+`yws-toolkit quality compare`
+
+- `--base <runId>`: baseline run id.
+- `--head <runId>`: target run id to compare against baseline.
+
+`yws-toolkit quality list-runs`
+
+- No required flags. Lists known runs and marks latest.
+
+`yws-toolkit quality clean-runs`
+
+- `--keep <N>`: keep newest `N` runs, target older ones for deletion.
+- `--dry-run`: show what would be deleted without deleting.
+- `--force`: allow deleting latest run when it is targeted.
+
+`yws-toolkit quality delete-run`
+
+- `--run <runId>`: run id to delete.
+- `--dry-run`: preview paths that would be deleted.
+- `--force`: allow deleting latest run.
+
+`yws-toolkit quality prune-runs`
+
+- `--older-than <days>`: target runs older than this age.
+- `--dry-run`: show what would be deleted without deleting.
+- `--force`: allow deleting latest run when it matches prune criteria.
 
 ### Lighthouse output
 

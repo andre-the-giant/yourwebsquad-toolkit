@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
+import { preferIpv4Loopback } from "../src/quality/common/url.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -62,19 +63,6 @@ function loadUrlsFromFile(file, baseUrl) {
       .filter(Boolean);
   } catch {
     return [];
-  }
-}
-
-function preferIpv4Loopback(url) {
-  try {
-    const u = new URL(url);
-    const host = String(u.hostname || "").toLowerCase();
-    if (host === "localhost" || host === "::1") {
-      u.hostname = "127.0.0.1";
-    }
-    return u.toString();
-  } catch {
-    return url;
   }
 }
 

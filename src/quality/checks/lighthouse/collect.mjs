@@ -38,7 +38,9 @@ function extractMetricsFromLighthouseReport(report) {
 export function collectLighthouseFromReportDir(reportDir, options = {}) {
   const stats = readJsonIfExists(path.join(reportDir, "stats.json"));
   const collectedMetrics = [];
-  const fallbackMetrics = readJsonIfExists(path.join(reportDir, "metrics.json"));
+  const fallbackMetrics = readJsonIfExists(
+    path.join(reportDir, "metrics.json"),
+  );
   const summary = path.join(reportDir, "summary.html");
   const logPath = options.logPath || null;
   const htmlReports = [];

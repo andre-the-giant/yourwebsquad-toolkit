@@ -187,7 +187,9 @@ async function main() {
   const baseUrl = preferIpv4Loopback(args.base || DEFAULT_BASE_URL);
   const reportDir = args.reportDir || DEFAULT_REPORT_DIR;
   const quiet = Boolean(args.quiet);
-  const urls = args.urlsFile ? loadUrlsFromFile(args.urlsFile, baseUrl) : [baseUrl];
+  const urls = args.urlsFile
+    ? loadUrlsFromFile(args.urlsFile, baseUrl)
+    : [baseUrl];
 
   if (!urls.length) {
     console.error("No URLs provided for Nu HTML Checker.");
@@ -220,7 +222,9 @@ async function main() {
     message: String(message?.message || "").trim(),
   }));
 
-  const errorCount = issues.filter((issue) => issue.severity === "error").length;
+  const errorCount = issues.filter(
+    (issue) => issue.severity === "error",
+  ).length;
   const warningCount = issues.filter(
     (issue) => issue.severity === "warning",
   ).length;

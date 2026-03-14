@@ -25,7 +25,8 @@ function statusForCheck(checkId, check = {}) {
       return { label: "Broken links found", tone: "fail" };
     if (checkId === "lighthouse")
       return { label: "Issues found", tone: "fail" };
-    if (checkId === "vnu") return { label: "Markup errors found", tone: "fail" };
+    if (checkId === "vnu")
+      return { label: "Markup errors found", tone: "fail" };
     return { label: "Needs attention", tone: "fail" };
   }
   const warningCount = asNumber(stats.warningCount);

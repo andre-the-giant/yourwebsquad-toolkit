@@ -722,7 +722,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
                   ? securityDetailsHtml(check)
                   : checkId === "vnu"
                     ? vnuDetailsHtml(check)
-                  : checkDetailsHtml(checkId, check),
+                    : checkDetailsHtml(checkId, check),
     });
     writeText(path.join(outDir, `${checkId}.html`), page);
   }

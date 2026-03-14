@@ -78,16 +78,65 @@ body {
 .status-chip {
   display: inline-block;
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border: 1px solid var(--line);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  background: color-mix(in srgb, var(--bg-elev-2) 82%, transparent);
 }
 
 .status-chip.pass {
   color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+  background: color-mix(in srgb, var(--ok) 12%, var(--bg-elev-2));
+}
+.status-chip.warn {
+  color: #f4c363;
+  border-color: color-mix(in srgb, #f4c363 40%, var(--line));
+  background: color-mix(in srgb, #f4c363 12%, var(--bg-elev-2));
 }
 .status-chip.fail {
   color: var(--fail);
+  border-color: color-mix(in srgb, var(--fail) 40%, var(--line));
+  background: color-mix(in srgb, var(--fail) 12%, var(--bg-elev-2));
 }
 .status-chip.info {
   color: var(--info);
+  border-color: color-mix(in srgb, var(--info) 40%, var(--line));
+  background: color-mix(in srgb, var(--info) 12%, var(--bg-elev-2));
+}
+
+.check-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.check-link:hover {
+  text-decoration: underline;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border: 1px solid var(--line);
+  padding: 8px;
+  text-align: left;
+}
+
+.table-wrap {
+  overflow: auto;
+  margin-top: 10px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.spacer-top {
+  margin-top: 12px;
 }

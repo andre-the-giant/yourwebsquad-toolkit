@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { qualityStorePaths } from "./paths.mjs";
-import { copyPath, ensureDir, generateRunId, writeJson } from "./helpers.mjs";
+import {
+  copyDirectoryChildren,
+  copyPath,
+  ensureDir,
+  generateRunId,
+  writeJson,
+} from "./helpers.mjs";
 
 function normalizeSources(sources) {
   if (!Array.isArray(sources)) return [];
@@ -35,6 +41,12 @@ export function writeRunSnapshot(options = {}) {
   for (const source of rawSources) {
     if (!fs.existsSync(source.path)) continue;
     const checkId = source.checkId || "misc";
+    const sourceStat = fs.statSync(source.path);
+    if (sourceStat.isDirectory() && source.name === ".") {
+      const destDir = path.join(runDir, "raw", checkId);
+      copyDirectoryChildren(source.path, destDir);
+      continue;
+    }
     const fileName = source.name || path.basename(source.path);
     const dest = path.join(runDir, "raw", checkId, fileName);
     copyPath(source.path, dest);

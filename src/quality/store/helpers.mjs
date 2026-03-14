@@ -32,6 +32,18 @@ export function copyPath(source, destination) {
   fs.copyFileSync(source, destination);
 }
 
+export function copyDirectoryChildren(sourceDir, destinationDir) {
+  if (!fs.existsSync(sourceDir)) return;
+  const stat = fs.statSync(sourceDir);
+  if (!stat.isDirectory()) {
+    throw new Error(`Expected directory source, got file: ${sourceDir}`);
+  }
+  ensureDir(destinationDir);
+  for (const child of fs.readdirSync(sourceDir)) {
+    copyPath(path.join(sourceDir, child), path.join(destinationDir, child));
+  }
+}
+
 export function generateRunId(now = new Date()) {
   const iso = now.toISOString().replace(/[:.]/g, "-");
   const rand = Math.random().toString(36).slice(2, 8);

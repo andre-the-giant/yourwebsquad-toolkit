@@ -18,6 +18,7 @@ export function normalizeLighthousePayload(raw, options = {}) {
     meta: {
       hasSummaryHtml: Boolean(raw?.hasSummaryHtml),
       logPath: raw?.logPath || null,
+      htmlReports: Array.isArray(raw?.htmlReports) ? raw.htmlReports : [],
     },
   };
 }

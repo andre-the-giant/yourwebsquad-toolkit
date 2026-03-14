@@ -57,6 +57,7 @@ function cleanCurrentView(reportRoot) {
     "links",
     "jsonld",
     "security",
+    "vnu",
   ]) {
     const full = path.join(reportRoot, target);
     if (fs.existsSync(full)) {

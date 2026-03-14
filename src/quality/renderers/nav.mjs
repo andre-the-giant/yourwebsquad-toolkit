@@ -7,5 +7,6 @@ export function reportNavLinks() {
     { key: "links", label: "Link check", href: "./links.html" },
     { key: "jsonld", label: "JSON-LD", href: "./jsonld.html" },
     { key: "security", label: "Security", href: "./security.html" },
+    { key: "vnu", label: "Nu HTML", href: "./vnu.html" },
   ];
 }

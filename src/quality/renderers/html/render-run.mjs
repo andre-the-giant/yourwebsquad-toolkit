@@ -16,6 +16,7 @@ const KNOWN_CHECKS = new Set([
   "links",
   "jsonld",
   "security",
+  "vnu",
 ]);
 
 function ensureDir(dirPath) {
@@ -53,6 +54,9 @@ function formatStatLabel(key) {
     runFailureUrls: "Run failure URLs",
     errorCount: "Errors",
     warningCount: "Warnings",
+    infoCount: "Info",
+    messagesTotal: "Messages",
+    pagesWithIssues: "Pages with issues",
     pagesTested: "Pages tested",
     findingsTotal: "Findings",
     broken: "Broken links",
@@ -399,6 +403,53 @@ function securityDetailsHtml(check = {}) {
   </section>`;
 }
 
+function vnuDetailsHtml(check = {}) {
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const statsRows = Object.entries(stats)
+    .map(
+      ([key, value]) =>
+        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
+    )
+    .join("");
+  const issues = Array.isArray(check?.issues) ? check.issues : [];
+  const issueRows = issues
+    .slice(0, 80)
+    .map(
+      (issue) => `<tr>
+        <td>${escapeContent(issue?.severity || "-")}</td>
+        <td>${escapeContent(issue?.url || "-")}</td>
+        <td>${escapeContent(issue?.line ?? "-")}</td>
+        <td>${escapeContent(issue?.column ?? "-")}</td>
+        <td>${escapeContent(issue?.message || "-")}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const mainReportLink = check?.meta?.reportHtmlPath
+    ? `<a class="check-link" href="./vnu/report.html">Open Nu HTML report.html</a>`
+    : `<span class="muted">No Nu HTML report.html found</span>`;
+
+  return `<section class="check-card">
+    <h2>Nu HTML Checker Overview</h2>
+    <div class="table-wrap">
+      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
+    </div>
+    <p class="spacer-top">${mainReportLink}</p>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Validation Issues</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Severity</th><th>URL</th><th>Line</th><th>Column</th><th>Message</th></tr>
+        </thead>
+        <tbody>${issueRows || '<tr><td colspan="5">No issues</td></tr>'}</tbody>
+      </table>
+    </div>
+  </section>`;
+}
+
 function formatMetricNumber(value, suffix = "") {
   const n = Number(value);
   if (!Number.isFinite(n)) return "-";
@@ -645,6 +696,14 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
         );
       }
     }
+    if (checkId === "vnu") {
+      if (check?.meta?.reportHtmlPath) {
+        copyFileIfExists(
+          check.meta.reportHtmlPath,
+          path.join(outDir, "vnu", "report.html"),
+        );
+      }
+    }
 
     const page = renderLayout({
       title: `Check: ${checkId}`,
@@ -661,6 +720,8 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
                 ? jsonldDetailsHtml(check)
                 : checkId === "security"
                   ? securityDetailsHtml(check)
+                  : checkId === "vnu"
+                    ? vnuDetailsHtml(check)
                   : checkDetailsHtml(checkId, check),
     });
     writeText(path.join(outDir, `${checkId}.html`), page);

@@ -13,6 +13,7 @@ function friendlyCheckName(checkId) {
     links: "Link Check",
     jsonld: "JSON-LD",
     security: "Security",
+    vnu: "Nu HTML Checker",
   };
   return map[checkId] || checkId;
 }
@@ -24,6 +25,7 @@ function statusForCheck(checkId, check = {}) {
       return { label: "Broken links found", tone: "fail" };
     if (checkId === "lighthouse")
       return { label: "Issues found", tone: "fail" };
+    if (checkId === "vnu") return { label: "Markup errors found", tone: "fail" };
     return { label: "Needs attention", tone: "fail" };
   }
   const warningCount = asNumber(stats.warningCount);
@@ -47,6 +49,8 @@ function friendlyStats(checkId, check = {}) {
     findingsTotal: "Findings",
     broken: "Broken links",
     skippedExternal: "External links skipped",
+    messagesTotal: "Messages",
+    pagesWithIssues: "Pages with issues",
     failures: "Failures",
   };
   const formatValue = (value) => {

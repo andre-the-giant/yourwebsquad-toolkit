@@ -2,7 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const CHECK_IDS = ["lighthouse", "pa11y", "seo", "links", "jsonld", "security"];
+const CHECK_IDS = [
+  "lighthouse",
+  "pa11y",
+  "seo",
+  "links",
+  "jsonld",
+  "security",
+  "vnu",
+];
 
 function asArray(value) {
   if (!Array.isArray(value)) return [];

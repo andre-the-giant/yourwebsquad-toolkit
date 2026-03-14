@@ -44,6 +44,9 @@ import { summarizeJsonldPayload } from "../src/quality/checks/jsonld/summarize.m
 import { collectSecurityFromReportDir } from "../src/quality/checks/security/collect.mjs";
 import { normalizeSecurityPayload } from "../src/quality/checks/security/normalize.mjs";
 import { summarizeSecurityPayload } from "../src/quality/checks/security/summarize.mjs";
+import { collectVnuFromReportDir } from "../src/quality/checks/vnu/collect.mjs";
+import { normalizeVnuPayload } from "../src/quality/checks/vnu/normalize.mjs";
+import { summarizeVnuPayload } from "../src/quality/checks/vnu/summarize.mjs";
 
 function npmArgvIncludes(flag) {
   try {
@@ -135,7 +138,7 @@ function openInBrowser(url) {
 
 const TEST_CHOICES = [
   {
-    name: "All (Lighthouse + Pa11y + SEO + Link check + JSON-LD + Security)",
+    name: "All (Lighthouse + Pa11y + SEO + Link check + JSON-LD + Security + Nu HTML)",
     value: "all",
   },
   { name: "Lighthouse", value: "lighthouse" },
@@ -144,6 +147,7 @@ const TEST_CHOICES = [
   { name: "Link check", value: "links" },
   { name: "JSON-LD validation", value: "jsonld" },
   { name: "Security audit", value: "security" },
+  { name: "Nu HTML Checker (vnu)", value: "vnu" },
 ];
 
 const CHECK_KEYS = [
@@ -153,6 +157,7 @@ const CHECK_KEYS = [
   "links",
   "jsonld",
   "security",
+  "vnu",
 ];
 const CHECK_NAME_BY_ID = {
   lighthouse: "Lighthouse",
@@ -161,6 +166,7 @@ const CHECK_NAME_BY_ID = {
   links: "Link check",
   jsonld: "JSON-LD validation",
   security: "Security audit",
+  vnu: "Nu HTML Checker (vnu)",
 };
 
 function choiceToFlags(choice) {
@@ -173,6 +179,7 @@ function choiceToFlags(choice) {
       links: true,
       jsonld: true,
       security: true,
+      vnu: true,
     };
   }
   const name = TEST_CHOICES.find((c) => c.value === choice)?.name || choice;
@@ -184,6 +191,7 @@ function choiceToFlags(choice) {
     links: choice === "links",
     jsonld: choice === "jsonld",
     security: choice === "security",
+    vnu: choice === "vnu",
   };
 }
 
@@ -210,6 +218,7 @@ function buildCheckAvailability(selectedTarget) {
           enabled: false,
           reason: "Not available on development (requires remote server)",
         },
+    vnu: { enabled: true },
   };
 }
 
@@ -418,6 +427,7 @@ function collectRawSources() {
       path: path.join(REPORT_ROOT, "security"),
       name: "security",
     },
+    { checkId: "vnu", path: path.join(REPORT_ROOT, "vnu"), name: "vnu" },
   ];
   for (const entry of direct) {
     if (fs.existsSync(entry.path)) {
@@ -701,6 +711,7 @@ function ensureCleanReports() {
     "links",
     "jsonld",
     "security",
+    "vnu",
   ]) {
     const full = path.join(REPORT_ROOT, target);
     if (fs.existsSync(full)) {
@@ -1367,6 +1378,36 @@ async function main() {
         failed: Boolean(result?.exitCode && result.exitCode !== 0),
       });
       return summarizeSecurityPayload(normalized);
+    };
+
+    checkRunners.vnu = async () => {
+      const result = await runCommand(
+        "node",
+        [
+          toolkitScriptPath("vnu-html-check.mjs"),
+          "--base",
+          baseUrl,
+          "--urls-file",
+          urlsFile,
+          "--report-dir",
+          path.join(REPORT_ROOT, "vnu"),
+          QUIET_MODE ? "--quiet" : "",
+        ].filter(Boolean),
+        {
+          label: "Nu HTML Checker (vnu)",
+          logName: "vnu",
+          allowFailure: true,
+          forceLog: true,
+        },
+      );
+      const raw = collectVnuFromReportDir(path.join(REPORT_ROOT, "vnu"), {
+        logPath: result?.logPath,
+      });
+      const normalized = normalizeVnuPayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      return summarizeVnuPayload(normalized);
     };
 
     const createdAt = new Date().toISOString();

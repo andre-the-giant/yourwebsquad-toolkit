@@ -4,6 +4,7 @@ import { linksCheck } from "./links/index.mjs";
 import { pa11yCheck } from "./pa11y/index.mjs";
 import { securityCheck } from "./security/index.mjs";
 import { seoCheck } from "./seo/index.mjs";
+import { vnuCheck } from "./vnu/index.mjs";
 import {
   clearQualityCheckRegistry,
   getQualityCheck,
@@ -18,6 +19,7 @@ const DEFAULT_CHECKS = [
   linksCheck,
   jsonldCheck,
   securityCheck,
+  vnuCheck,
 ];
 
 export function registerDefaultQualityChecks({ reset = false } = {}) {

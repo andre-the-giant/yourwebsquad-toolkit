@@ -11,6 +11,8 @@ import { collectJsonldFromReportDir } from "../checks/jsonld/collect.mjs";
 import { normalizeJsonldPayload } from "../checks/jsonld/normalize.mjs";
 import { collectSecurityFromReportDir } from "../checks/security/collect.mjs";
 import { normalizeSecurityPayload } from "../checks/security/normalize.mjs";
+import { collectVnuFromReportDir } from "../checks/vnu/collect.mjs";
+import { normalizeVnuPayload } from "../checks/vnu/normalize.mjs";
 
 const CHECK_KEYS = [
   "lighthouse",
@@ -19,6 +21,7 @@ const CHECK_KEYS = [
   "links",
   "jsonld",
   "security",
+  "vnu",
 ];
 
 export function selectedCheckIds(selectedChecks) {
@@ -34,6 +37,7 @@ function checkFailedMap(failures = []) {
     links: failedSet.has("Link check"),
     jsonld: failedSet.has("JSON-LD validation"),
     security: failedSet.has("Security audit"),
+    vnu: failedSet.has("Nu HTML Checker (vnu)"),
   };
 }
 
@@ -108,6 +112,15 @@ export function buildCanonicalDataset({
     checks.security = normalizeSecurityPayload(raw, {
       selected: true,
       failed: failed.security,
+    });
+  }
+  if (selectedChecks?.vnu) {
+    const raw = collectVnuFromReportDir(path.join(reportRoot, "vnu"), {
+      logPath: path.join(logRoot, "vnu.log"),
+    });
+    checks.vnu = normalizeVnuPayload(raw, {
+      selected: true,
+      failed: failed.vnu,
     });
   }
 

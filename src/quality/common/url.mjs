@@ -21,4 +21,3 @@ export function preferIpv4Loopback(url) {
     return url;
   }
 }
-

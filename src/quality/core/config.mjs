@@ -2,14 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const CHECK_IDS = [
-  "lighthouse",
-  "pa11y",
-  "seo",
-  "links",
-  "jsonld",
-  "security",
-];
+const CHECK_IDS = ["lighthouse", "pa11y", "seo", "links", "jsonld", "security"];
 
 function asArray(value) {
   if (!Array.isArray(value)) return [];
@@ -94,7 +87,11 @@ export async function loadQualityConfig(cwd = process.cwd()) {
   return { path: null, ...normalizeConfig({}) };
 }
 
-export function applyQualityConfigToSelection(selectedChecks, config, availability) {
+export function applyQualityConfigToSelection(
+  selectedChecks,
+  config,
+  availability,
+) {
   const selection = { ...selectedChecks };
   const checks = config?.checks || {};
   const enabled = checks.enabled;

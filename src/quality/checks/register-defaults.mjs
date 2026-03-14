@@ -33,4 +33,3 @@ export function registerDefaultQualityChecks({ reset = false } = {}) {
 
   return listQualityChecks();
 }
-

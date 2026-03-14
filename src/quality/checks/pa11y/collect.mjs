@@ -22,4 +22,3 @@ export function collectPa11yFromReportDir(reportDir, options = {}) {
     hasSummaryMd: fs.existsSync(summaryMd),
   };
 }
-

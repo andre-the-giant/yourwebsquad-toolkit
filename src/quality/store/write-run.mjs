@@ -16,7 +16,8 @@ export function writeRunSnapshot(options = {}) {
   const rawSources = normalizeSources(options.rawSources);
   const viewSources = options.viewSources || {};
 
-  const { reportRoot, runsRoot, viewsRoot, latestPath } = qualityStorePaths(cwd);
+  const { reportRoot, runsRoot, viewsRoot, latestPath } =
+    qualityStorePaths(cwd);
   ensureDir(reportRoot);
   ensureDir(runsRoot);
   ensureDir(viewsRoot);
@@ -53,4 +54,3 @@ export function writeRunSnapshot(options = {}) {
   writeJson(latestPath, { runId, updatedAt: new Date().toISOString() });
   return { runId, runDir };
 }
-

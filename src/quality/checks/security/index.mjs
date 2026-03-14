@@ -24,4 +24,3 @@ export const securityCheck = defineQualityCheck({
     supportsLocalBuild: false,
   },
 });
-

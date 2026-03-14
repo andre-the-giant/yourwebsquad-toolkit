@@ -20,4 +20,3 @@ export function summarizeJsonldPayload(payload) {
   const summary = `JSON-LD: ${errors} errors${warnings ? `, ${warnings} warnings` : ""} across ${pages} page(s)`;
   return { summary, failed };
 }
-

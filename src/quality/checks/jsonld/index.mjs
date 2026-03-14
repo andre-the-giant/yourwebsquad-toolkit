@@ -24,4 +24,3 @@ export const jsonldCheck = defineQualityCheck({
     supportsLocalBuild: true,
   },
 });
-

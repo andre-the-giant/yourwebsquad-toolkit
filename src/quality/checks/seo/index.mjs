@@ -24,4 +24,3 @@ export const seoCheck = defineQualityCheck({
     supportsLocalBuild: true,
   },
 });
-

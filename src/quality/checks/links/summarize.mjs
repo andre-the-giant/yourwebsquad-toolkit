@@ -20,4 +20,3 @@ export function summarizeLinksPayload(payload) {
     : "Link check: 0 broken links";
   return { summary, failed };
 }
-

@@ -16,4 +16,3 @@ export function createArtifactManifest({ format, runId, rootDir, files = [] }) {
     files: Array.isArray(files) ? files : [],
   };
 }
-

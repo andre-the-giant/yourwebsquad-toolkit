@@ -111,4 +111,3 @@ test("quality config selection and ordering are applied", () => {
   const ordered = orderedSelectedChecks(next, config);
   assert.deepEqual(ordered, ["seo"]);
 });
-

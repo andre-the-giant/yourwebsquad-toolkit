@@ -37,4 +37,3 @@ export function generateRunId(now = new Date()) {
   const rand = Math.random().toString(36).slice(2, 8);
   return `${iso}-${rand}`;
 }
-

@@ -92,7 +92,9 @@ if (format === "html") {
   sourceRoot = manifest.rootDir;
 }
 if (!fs.existsSync(sourceRoot)) {
-  console.error(`No ${format} view artifacts found for run ${runId} at ${sourceRoot}.`);
+  console.error(
+    `No ${format} view artifacts found for run ${runId} at ${sourceRoot}.`,
+  );
   process.exit(1);
 }
 

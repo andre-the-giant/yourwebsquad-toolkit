@@ -29,13 +29,17 @@ function writeText(filePath, text) {
 
 function navHtml() {
   const links = reportNavLinks()
-    .map((link) => `<a href="${escapeContent(link.href)}">${escapeContent(link.label)}</a>`)
+    .map(
+      (link) =>
+        `<a href="${escapeContent(link.href)}">${escapeContent(link.label)}</a>`,
+    )
     .join("");
   return `<div class="report-nav">${links}</div>`;
 }
 
 function checkDetailsHtml(checkId, check = {}) {
-  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
   const isKnown = KNOWN_CHECKS.has(checkId);
   const statsRows = Object.entries(stats)
     .map(
@@ -56,7 +60,8 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
   const outDir = path.join(reportRoot, "views", "html", runId);
   ensureDir(outDir);
 
-  const checks = dataset?.checks && typeof dataset.checks === "object" ? dataset.checks : {};
+  const checks =
+    dataset?.checks && typeof dataset.checks === "object" ? dataset.checks : {};
   const cards = Object.entries(checks)
     .map(([checkId, check]) =>
       KNOWN_CHECKS.has(checkId)
@@ -86,16 +91,18 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
   }
 
   const currentFile = fileURLToPath(import.meta.url);
-  const cssSource = path.join(path.dirname(currentFile), "assets", "report.css");
+  const cssSource = path.join(
+    path.dirname(currentFile),
+    "assets",
+    "report.css",
+  );
   const cssTarget = path.join(outDir, "report.css");
   fs.copyFileSync(cssSource, cssTarget);
 
-  const files = fs
-    .readdirSync(outDir)
-    .map((name) => ({
-      path: path.join(outDir, name),
-      relPath: name,
-    }));
+  const files = fs.readdirSync(outDir).map((name) => ({
+    path: path.join(outDir, name),
+    relPath: name,
+  }));
 
   return createArtifactManifest({
     format: "html",

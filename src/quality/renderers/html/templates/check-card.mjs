@@ -8,10 +8,14 @@ function statusClass(check = {}) {
 export function renderCheckCard(checkId, check = {}) {
   const label = check?.label || checkId;
   const status = check.failed ? "Issues" : "Pass";
-  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
   const statRows = Object.entries(stats)
     .slice(0, 4)
-    .map(([key, value]) => `<li><strong>${escapeContent(key)}:</strong> ${escapeContent(value)}</li>`)
+    .map(
+      ([key, value]) =>
+        `<li><strong>${escapeContent(key)}:</strong> ${escapeContent(value)}</li>`,
+    )
     .join("");
 
   return `<section class="check-card">
@@ -29,4 +33,3 @@ export function renderUnknownCheckFallback(checkId, check = {}) {
     <p>No dedicated template yet for this check.</p>
   </section>`;
 }
-

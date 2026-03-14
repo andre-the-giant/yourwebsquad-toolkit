@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
-import { readLatestRunId, listRuns, readRun } from "../src/quality/store/index.mjs";
+import {
+  readLatestRunId,
+  listRuns,
+  readRun,
+} from "../src/quality/store/index.mjs";
 
 function parseArgs(argv) {
   const options = {};
@@ -115,4 +119,3 @@ for (const checkId of checkIds) {
     console.log(`- ${key}: ${baseVal} -> ${headVal} (${sign}${delta})`);
   }
 }
-

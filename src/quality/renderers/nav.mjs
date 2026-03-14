@@ -9,4 +9,3 @@ export function reportNavLinks() {
     { key: "security", label: "Security", href: "./security.html" },
   ];
 }
-

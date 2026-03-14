@@ -33,4 +33,3 @@ export function normalizeSeoPayload(raw, options = {}) {
     },
   };
 }
-

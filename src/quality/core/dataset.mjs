@@ -51,9 +51,12 @@ export function buildCanonicalDataset({
   const checks = {};
 
   if (selectedChecks?.lighthouse) {
-    const raw = collectLighthouseFromReportDir(path.join(reportRoot, "lighthouse"), {
-      logPath: path.join(logRoot, "lighthouse.log"),
-    });
+    const raw = collectLighthouseFromReportDir(
+      path.join(reportRoot, "lighthouse"),
+      {
+        logPath: path.join(logRoot, "lighthouse.log"),
+      },
+    );
     checks.lighthouse = normalizeLighthousePayload(raw, {
       selected: true,
       failed: failed.lighthouse,
@@ -96,9 +99,12 @@ export function buildCanonicalDataset({
     });
   }
   if (selectedChecks?.security) {
-    const raw = collectSecurityFromReportDir(path.join(reportRoot, "security"), {
-      logPath: path.join(logRoot, "security.log"),
-    });
+    const raw = collectSecurityFromReportDir(
+      path.join(reportRoot, "security"),
+      {
+        logPath: path.join(logRoot, "security.log"),
+      },
+    );
     checks.security = normalizeSecurityPayload(raw, {
       selected: true,
       failed: failed.security,
@@ -128,4 +134,3 @@ export function assignDatasetRunId(dataset, runId) {
     runId,
   };
 }
-

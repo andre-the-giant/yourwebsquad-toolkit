@@ -22,4 +22,3 @@ export function collectSeoFromReportDir(reportDir, options = {}) {
     hasReportHtml: fs.existsSync(reportHtml),
   };
 }
-

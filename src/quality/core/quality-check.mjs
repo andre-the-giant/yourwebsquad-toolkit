@@ -21,4 +21,3 @@ export function defineQualityCheck(check) {
   }
   return Object.freeze({ ...check });
 }
-

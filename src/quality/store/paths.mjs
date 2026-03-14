@@ -7,4 +7,3 @@ export function qualityStorePaths(cwd = process.cwd()) {
   const latestPath = path.join(reportRoot, "latest.json");
   return { reportRoot, runsRoot, viewsRoot, latestPath };
 }
-

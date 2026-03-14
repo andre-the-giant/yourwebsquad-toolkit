@@ -57,7 +57,9 @@ test("writeRunSnapshot writes run, latest pointer, and raw/view artifacts", () =
     "raw artifact copied",
   );
   assert.ok(
-    fs.existsSync(path.join(cwd, "reports", "views", "html", snapshot.runId, "index.html")),
+    fs.existsSync(
+      path.join(cwd, "reports", "views", "html", snapshot.runId, "index.html"),
+    ),
     "view artifact copied",
   );
   assert.equal(readLatestRunId(cwd), snapshot.runId);
@@ -138,4 +140,3 @@ test("clean and prune run operations produce expected targeting", () => {
   assert.ok(old.runId);
   assert.ok(recent.runId);
 });
-

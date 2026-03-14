@@ -669,14 +669,30 @@ function summarizeJsonld(reportDir) {
 function collectRawSources() {
   const sources = [];
   const direct = [
-    { checkId: "suite", path: path.join(REPORT_ROOT, "urls.json"), name: "urls.json" },
+    {
+      checkId: "suite",
+      path: path.join(REPORT_ROOT, "urls.json"),
+      name: "urls.json",
+    },
     { checkId: "suite", path: path.join(REPORT_ROOT, "logs"), name: "logs" },
-    { checkId: "lighthouse", path: path.join(REPORT_ROOT, "lighthouse"), name: "lighthouse" },
+    {
+      checkId: "lighthouse",
+      path: path.join(REPORT_ROOT, "lighthouse"),
+      name: "lighthouse",
+    },
     { checkId: "pa11y", path: path.join(REPORT_ROOT, "pa11y"), name: "pa11y" },
     { checkId: "seo", path: path.join(REPORT_ROOT, "seo"), name: "seo" },
     { checkId: "links", path: path.join(REPORT_ROOT, "links"), name: "links" },
-    { checkId: "jsonld", path: path.join(REPORT_ROOT, "jsonld"), name: "jsonld" },
-    { checkId: "security", path: path.join(REPORT_ROOT, "security"), name: "security" },
+    {
+      checkId: "jsonld",
+      path: path.join(REPORT_ROOT, "jsonld"),
+      name: "jsonld",
+    },
+    {
+      checkId: "security",
+      path: path.join(REPORT_ROOT, "security"),
+      name: "security",
+    },
   ];
   for (const entry of direct) {
     if (fs.existsSync(entry.path)) {
@@ -693,10 +709,22 @@ function collectHtmlViewSources() {
       path: path.join(REPORT_ROOT, "lighthouse", "summary.html"),
       name: "lighthouse/summary.html",
     },
-    { path: path.join(REPORT_ROOT, "pa11y", "report.html"), name: "pa11y/report.html" },
-    { path: path.join(REPORT_ROOT, "seo", "report.html"), name: "seo/report.html" },
-    { path: path.join(REPORT_ROOT, "links", "report.html"), name: "links/report.html" },
-    { path: path.join(REPORT_ROOT, "jsonld", "report.html"), name: "jsonld/report.html" },
+    {
+      path: path.join(REPORT_ROOT, "pa11y", "report.html"),
+      name: "pa11y/report.html",
+    },
+    {
+      path: path.join(REPORT_ROOT, "seo", "report.html"),
+      name: "seo/report.html",
+    },
+    {
+      path: path.join(REPORT_ROOT, "links", "report.html"),
+      name: "links/report.html",
+    },
+    {
+      path: path.join(REPORT_ROOT, "jsonld", "report.html"),
+      name: "jsonld/report.html",
+    },
     {
       path: path.join(REPORT_ROOT, "security", "report.html"),
       name: "security/report.html",
@@ -1962,9 +1990,12 @@ async function main() {
           forceLog: true,
         },
       );
-      const raw = collectSecurityFromReportDir(path.join(REPORT_ROOT, "security"), {
-        logPath: result?.logPath,
-      });
+      const raw = collectSecurityFromReportDir(
+        path.join(REPORT_ROOT, "security"),
+        {
+          logPath: result?.logPath,
+        },
+      );
       const normalized = normalizeSecurityPayload(raw, {
         selected: true,
         failed: Boolean(result?.exitCode && result.exitCode !== 0),
@@ -1973,33 +2004,35 @@ async function main() {
     };
 
     const createdAt = new Date().toISOString();
-    const { failures, dataset: pendingDataset } = await runPlannedQualityChecks({
-      plan: planForLabel,
-      runners: checkRunners,
-      targetUsesLocalBuild: selectedTarget.usesLocalBuild,
-      selectedChecks,
-      quietMode: QUIET_MODE,
-      logger: console,
-      buildDataset: ({ failures: checkFailures, context }) =>
-        buildCanonicalDataset({
-          runId: "__pending__",
-          createdAt: context.createdAt,
-          selectedTarget: context.selectedTarget,
-          baseUrl: context.baseUrl,
-          selectedChecks: context.selectedChecks,
-          failures: checkFailures,
-          reportRoot: context.reportRoot,
-          logRoot: context.logRoot,
-        }),
-      datasetContext: {
-        createdAt,
-        selectedTarget,
-        baseUrl,
+    const { failures, dataset: pendingDataset } = await runPlannedQualityChecks(
+      {
+        plan: planForLabel,
+        runners: checkRunners,
+        targetUsesLocalBuild: selectedTarget.usesLocalBuild,
         selectedChecks,
-        reportRoot: REPORT_ROOT,
-        logRoot: LOG_ROOT,
+        quietMode: QUIET_MODE,
+        logger: console,
+        buildDataset: ({ failures: checkFailures, context }) =>
+          buildCanonicalDataset({
+            runId: "__pending__",
+            createdAt: context.createdAt,
+            selectedTarget: context.selectedTarget,
+            baseUrl: context.baseUrl,
+            selectedChecks: context.selectedChecks,
+            failures: checkFailures,
+            reportRoot: context.reportRoot,
+            logRoot: context.logRoot,
+          }),
+        datasetContext: {
+          createdAt,
+          selectedTarget,
+          baseUrl,
+          selectedChecks,
+          reportRoot: REPORT_ROOT,
+          logRoot: LOG_ROOT,
+        },
       },
-    });
+    );
 
     if (siteServer && !siteServer.killed) {
       console.log("🛑 Stopping site server...");
@@ -2027,11 +2060,19 @@ async function main() {
         `${JSON.stringify(dataset, null, 2)}\n`,
         "utf8",
       );
-      console.log(`🧾 Run snapshot saved: ${path.join("reports", "runs", runId)}`);
+      console.log(
+        `🧾 Run snapshot saved: ${path.join("reports", "runs", runId)}`,
+      );
 
       await runCommand(
         "node",
-        [toolkitScriptPath("quality-render.mjs"), "--run", runId, "--format", "html"],
+        [
+          toolkitScriptPath("quality-render.mjs"),
+          "--run",
+          runId,
+          "--format",
+          "html",
+        ],
         {
           label: "Render HTML view",
           logName: "render-html",

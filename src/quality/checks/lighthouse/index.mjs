@@ -24,4 +24,3 @@ export const lighthouseCheck = defineQualityCheck({
     supportsLocalBuild: true,
   },
 });
-

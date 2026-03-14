@@ -24,4 +24,3 @@ export const linksCheck = defineQualityCheck({
     supportsLocalBuild: true,
   },
 });
-

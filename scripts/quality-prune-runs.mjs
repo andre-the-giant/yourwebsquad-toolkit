@@ -53,4 +53,3 @@ if (options.dryRun) {
 console.log(
   `Pruned runs older than ${options.olderThanDays} day(s): deleted ${summary.deleted}/${summary.targeted}.`,
 );
-

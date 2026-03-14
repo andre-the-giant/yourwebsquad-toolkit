@@ -21,4 +21,3 @@ export function normalizePa11yPayload(raw, options = {}) {
     },
   };
 }
-

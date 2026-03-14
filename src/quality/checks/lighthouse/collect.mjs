@@ -23,4 +23,3 @@ export function collectLighthouseFromReportDir(reportDir, options = {}) {
     hasSummaryHtml: fs.existsSync(summary),
   };
 }
-

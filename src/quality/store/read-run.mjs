@@ -12,4 +12,3 @@ export function readRun(runId, cwd = process.cwd()) {
   const dataset = safeReadJson(path.join(runDir, "dataset.json"));
   return { runId, runDir, meta, dataset };
 }
-

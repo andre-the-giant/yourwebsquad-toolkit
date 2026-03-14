@@ -22,4 +22,3 @@ export function summarizeSeoPayload(payload) {
       : "SEO issues: 0";
   return { summary, failed };
 }
-

@@ -22,4 +22,3 @@ export function collectJsonldFromReportDir(reportDir, options = {}) {
     hasReportHtml: fs.existsSync(reportHtml),
   };
 }
-

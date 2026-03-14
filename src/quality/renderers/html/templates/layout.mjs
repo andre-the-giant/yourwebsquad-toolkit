@@ -7,7 +7,12 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-export function renderLayout({ title, subtitle = "", navHtml = "", bodyHtml = "" }) {
+export function renderLayout({
+  title,
+  subtitle = "",
+  navHtml = "",
+  bodyHtml = "",
+}) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -32,4 +37,3 @@ export function renderLayout({ title, subtitle = "", navHtml = "", bodyHtml = ""
 export function escapeContent(value) {
   return escapeHtml(value);
 }
-

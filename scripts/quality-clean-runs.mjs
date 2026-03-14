@@ -53,4 +53,3 @@ if (options.dryRun) {
 console.log(
   `Cleaned runs: kept ${summary.keep}, deleted ${summary.deleted}/${summary.targeted} targeted.`,
 );
-

@@ -28,4 +28,3 @@ export function summarizeLighthousePayload(payload) {
 
   return { summary: "Lighthouse: 0 issues", failed: Boolean(payload?.failed) };
 }
-

@@ -19,4 +19,3 @@ for (const run of runs) {
     `- ${run.runId}${isLatest} | ${createdAt} | target=${target} | checks=${run.checksCount}`,
   );
 }
-

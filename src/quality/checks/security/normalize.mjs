@@ -20,4 +20,3 @@ export function normalizeSecurityPayload(raw, options = {}) {
     },
   };
 }
-

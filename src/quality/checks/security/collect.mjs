@@ -22,4 +22,3 @@ export function collectSecurityFromReportDir(reportDir, options = {}) {
     hasSummaryMd: fs.existsSync(summaryMd),
   };
 }
-

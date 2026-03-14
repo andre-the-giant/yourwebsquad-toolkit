@@ -20,4 +20,3 @@ export function collectLinksFromReportDir(reportDir, options = {}) {
     hasReportHtml: fs.existsSync(reportHtml),
   };
 }
-

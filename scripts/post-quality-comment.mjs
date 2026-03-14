@@ -86,7 +86,9 @@ function buildBodyFromCanonical(snapshot) {
   lines.push("");
   lines.push(`- Run: \`${snapshot.runId}\``);
   lines.push(`- Created: ${formatDate(snapshot.createdAt)}`);
-  lines.push(`- Target: **${dataset?.target?.name || dataset?.target?.key || "unknown"}**`);
+  lines.push(
+    `- Target: **${dataset?.target?.name || dataset?.target?.key || "unknown"}**`,
+  );
   lines.push("");
 
   const lhStats = checks?.lighthouse?.stats || null;
@@ -95,7 +97,9 @@ function buildBodyFromCanonical(snapshot) {
     lines.push("- No Lighthouse stats in canonical dataset.");
   } else {
     lines.push(`- Pages tested: **${toNumber(lhStats.urlsTested)}**`);
-    lines.push(`- Assertion failures: **${toNumber(lhStats.assertionFailures)}**`);
+    lines.push(
+      `- Assertion failures: **${toNumber(lhStats.assertionFailures)}**`,
+    );
     lines.push(`- Run failures: **${toNumber(lhStats.runFailures)}**`);
   }
   lines.push("");
@@ -120,7 +124,9 @@ function buildBodyFromCanonical(snapshot) {
     lines.push(
       `- Pages tested: **${toNumber(seoStats?.pagesTested || 0) || "unknown"}**`,
     );
-    lines.push(`- Error-level issues: **${toNumber(seoStats?.errorCount || 0)}**`);
+    lines.push(
+      `- Error-level issues: **${toNumber(seoStats?.errorCount || 0)}**`,
+    );
     lines.push(
       `- Warning-level issues: **${toNumber(seoStats?.warningCount || 0)}**`,
     );
@@ -145,7 +151,9 @@ function buildBodyFromCanonical(snapshot) {
 
 function buildBodyFromLegacy(legacy) {
   const seoIssues = legacy?.seoIssues || [];
-  const seoPages = new Set(seoIssues.map((issue) => issue?.pageUrl).filter(Boolean));
+  const seoPages = new Set(
+    seoIssues.map((issue) => issue?.pageUrl).filter(Boolean),
+  );
   const seoErrorCount = seoIssues.filter((i) => i?.severity === "error").length;
   const seoWarnCount = seoIssues.filter((i) => i?.severity === "warn").length;
   const pa11yStats = legacy?.pa11yStats || null;
@@ -161,7 +169,9 @@ function buildBodyFromLegacy(legacy) {
     lines.push("- No Lighthouse stats found.");
   } else {
     lines.push(`- Pages tested: **${toNumber(lhStats.urlsTested)}**`);
-    lines.push(`- Assertion failures: **${toNumber(lhStats.assertionFailures)}**`);
+    lines.push(
+      `- Assertion failures: **${toNumber(lhStats.assertionFailures)}**`,
+    );
     lines.push(`- Run failures: **${toNumber(lhStats.runFailures)}**`);
   }
   lines.push("");
@@ -241,6 +251,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`Unexpected error posting quality summary: ${error?.message || error}`);
+  console.error(
+    `Unexpected error posting quality summary: ${error?.message || error}`,
+  );
   process.exit(0);
 });

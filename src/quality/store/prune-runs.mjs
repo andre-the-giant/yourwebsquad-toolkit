@@ -30,4 +30,3 @@ export function pruneRunsOlderThan(options = {}) {
     results,
   };
 }
-

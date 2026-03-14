@@ -15,7 +15,7 @@ export function summarizeSecurityPayload(payload) {
     };
   }
 
-  const summary = findings > 0 ? `Security findings: ${findings}` : "Security findings: 0";
+  const summary =
+    findings > 0 ? `Security findings: ${findings}` : "Security findings: 0";
   return { summary, failed };
 }
-

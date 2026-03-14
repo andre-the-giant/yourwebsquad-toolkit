@@ -28,7 +28,9 @@ function parseArgs(argv) {
 
 const options = parseArgs(process.argv.slice(2));
 if (!options.runId) {
-  console.error("Usage: yws-toolkit quality delete-run --run <runId> [--dry-run] [--force]");
+  console.error(
+    "Usage: yws-toolkit quality delete-run --run <runId> [--dry-run] [--force]",
+  );
   process.exit(1);
 }
 
@@ -58,4 +60,3 @@ if (options.dryRun) {
 }
 
 console.log(`Deleted run ${options.runId} (${result.actions.length} path(s)).`);
-

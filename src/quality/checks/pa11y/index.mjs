@@ -24,4 +24,3 @@ export const pa11yCheck = defineQualityCheck({
     supportsLocalBuild: true,
   },
 });
-

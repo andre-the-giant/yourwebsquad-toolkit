@@ -22,4 +22,3 @@ export function summarizePa11yPayload(payload) {
       : "Pa11y issues: 0";
   return { summary, failed };
 }
-

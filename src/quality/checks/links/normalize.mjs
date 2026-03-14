@@ -30,4 +30,3 @@ export function normalizeLinksPayload(raw, options = {}) {
     },
   };
 }
-

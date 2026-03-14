@@ -17,6 +17,9 @@ export function normalizeSecurityPayload(raw, options = {}) {
       logPath: raw?.logPath || null,
       hasReportHtml: Boolean(raw?.hasReportHtml),
       hasSummaryMd: Boolean(raw?.hasSummaryMd),
+      reportHtmlPath: raw?.reportHtmlPath || null,
+      summaryMdPath: raw?.summaryMdPath || null,
+      observatoryJsonPath: raw?.observatoryJsonPath || null,
     },
   };
 }

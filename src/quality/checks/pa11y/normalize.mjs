@@ -18,6 +18,9 @@ export function normalizePa11yPayload(raw, options = {}) {
       hasReportHtml: Boolean(raw?.hasReportHtml),
       hasSummaryMd: Boolean(raw?.hasSummaryMd),
       warningCount: warnings,
+      reportHtmlPath: raw?.reportHtmlPath || null,
+      summaryMdPath: raw?.summaryMdPath || null,
+      pageReports: Array.isArray(raw?.pageReports) ? raw.pageReports : [],
     },
   };
 }

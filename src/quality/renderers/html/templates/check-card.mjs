@@ -47,12 +47,18 @@ function friendlyStats(checkId, check = {}) {
     findingsTotal: "Findings",
     broken: "Broken links",
     skippedExternal: "External links skipped",
+    failures: "Failures",
+  };
+  const formatValue = (value) => {
+    if (Array.isArray(value)) return `${value.length}`;
+    if (value && typeof value === "object") return `${Object.keys(value).length}`;
+    return `${value ?? "-"}`;
   };
   return Object.entries(stats)
     .slice(0, 4)
     .map(
       ([key, value]) =>
-        `<li><strong>${escapeContent(labels[key] || key)}:</strong> ${escapeContent(value)}</li>`,
+        `<li><strong>${escapeContent(labels[key] || key)}:</strong> ${escapeContent(formatValue(value))}</li>`,
     )
     .join("");
 }

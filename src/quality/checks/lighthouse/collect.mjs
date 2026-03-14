@@ -24,6 +24,14 @@ function extractMetricsFromLighthouseReport(report) {
   const metrics = report?.audits?.metrics?.details?.items?.[0] || {};
   const totalSummary = findResourceSummaryItem(report, "total");
   const documentSummary = findResourceSummaryItem(report, "document");
+  const categories =
+    report?.categories && typeof report.categories === "object"
+      ? report.categories
+      : {};
+  const score = (id) => {
+    const value = categories?.[id]?.score;
+    return Number.isFinite(value) ? Number(value) : null;
+  };
   return {
     htmlSizeBytes: asFiniteNumber(documentSummary?.transferSize),
     totalLoadedSizeBytes:
@@ -32,6 +40,13 @@ function extractMetricsFromLighthouseReport(report) {
     totalLoadTimeMs:
       asFiniteNumber(metrics.observedLoad) ??
       asFiniteNumber(report?.audits?.metrics?.numericValue),
+    scores: {
+      performance: score("performance"),
+      accessibility: score("accessibility"),
+      bestPractices: score("best-practices"),
+      seo: score("seo"),
+      pwa: score("pwa"),
+    },
   };
 }
 

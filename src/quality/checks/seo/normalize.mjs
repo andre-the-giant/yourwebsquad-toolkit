@@ -30,6 +30,9 @@ export function normalizeSeoPayload(raw, options = {}) {
     meta: {
       logPath: raw?.logPath || null,
       hasReportHtml: Boolean(raw?.hasReportHtml),
+      reportHtmlPath: raw?.reportHtmlPath || null,
+      summaryMdPath: raw?.summaryMdPath || null,
+      pageReports: Array.isArray(raw?.pageReports) ? raw.pageReports : [],
     },
   };
 }

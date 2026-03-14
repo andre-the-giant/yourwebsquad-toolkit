@@ -96,10 +96,327 @@ function checkDetailsHtml(checkId, check = {}) {
   </section>`;
 }
 
+function pa11yDetailsHtml(check = {}) {
+  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const statsRows = Object.entries(stats)
+    .map(
+      ([key, value]) =>
+        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
+    )
+    .join("");
+  const pageReports = Array.isArray(check?.meta?.pageReports)
+    ? check.meta.pageReports
+    : [];
+  const pageReportLinks = pageReports.length
+    ? `<ul>${pageReports
+        .slice(0, 25)
+        .map(
+          (report) =>
+            `<li><a class="check-link" href="./pa11y/pages/${escapeContent(report.name)}">${escapeContent(report.name)}</a></li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="muted">No Pa11y page-level reports found.</p>`;
+
+  const mainReportLink = check?.meta?.reportHtmlPath
+    ? `<a class="check-link" href="./pa11y/report.html">Open Pa11y report.html</a>`
+    : `<span class="muted">No Pa11y report.html found</span>`;
+
+  return `<section class="check-card">
+    <h2>Pa11y Overview</h2>
+    <div class="table-wrap">
+      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
+    </div>
+    <p class="spacer-top">${mainReportLink}</p>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Page Reports</h2>
+    ${pageReportLinks}
+  </section>`;
+}
+
+function seoDetailsHtml(check = {}) {
+  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const statsRows = Object.entries(stats)
+    .map(
+      ([key, value]) =>
+        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
+    )
+    .join("");
+  const issues = Array.isArray(check?.issues) ? check.issues : [];
+  const issueRows = issues
+    .slice(0, 40)
+    .map(
+      (issue) => `<tr>
+        <td>${escapeContent(issue?.severity || "-")}</td>
+        <td>${escapeContent(issue?.code || "-")}</td>
+        <td>${escapeContent(issue?.message || "-")}</td>
+        <td>${escapeContent(issue?.pageUrl || "-")}</td>
+      </tr>`,
+    )
+    .join("");
+  const pageReports = Array.isArray(check?.meta?.pageReports)
+    ? check.meta.pageReports
+    : [];
+  const pageReportLinks = pageReports.length
+    ? `<ul>${pageReports
+        .slice(0, 25)
+        .map(
+          (report) =>
+            `<li><a class="check-link" href="./seo/pages/${escapeContent(report.name)}">${escapeContent(report.name)}</a></li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="muted">No SEO page-level reports found.</p>`;
+
+  const mainReportLink = check?.meta?.reportHtmlPath
+    ? `<a class="check-link" href="./seo/report.html">Open SEO report.html</a>`
+    : `<span class="muted">No SEO report.html found</span>`;
+
+  return `<section class="check-card">
+    <h2>SEO Overview</h2>
+    <div class="table-wrap">
+      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
+    </div>
+    <p class="spacer-top">${mainReportLink}</p>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Top Issues</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Severity</th><th>Code</th><th>Message</th><th>Page</th></tr>
+        </thead>
+        <tbody>${issueRows || "<tr><td colspan=\"4\">No issues</td></tr>"}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Page Reports</h2>
+    ${pageReportLinks}
+  </section>`;
+}
+
+function linksDetailsHtml(check = {}) {
+  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const statsRows = Object.entries(stats)
+    .map(
+      ([key, value]) =>
+        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
+    )
+    .join("");
+  const linksPayload =
+    check?.links && typeof check.links === "object" ? check.links : {};
+  const broken = Array.isArray(linksPayload.broken) ? linksPayload.broken : [];
+  const brokenRows = broken
+    .slice(0, 80)
+    .map(
+      (entry) => `<tr>
+        <td>${escapeContent(entry?.pageUrl || "-")}</td>
+        <td>${escapeContent(entry?.linkUrl || "-")}</td>
+        <td>${escapeContent(entry?.status || entry?.error || "-")}</td>
+        <td>${escapeContent(entry?.selector || "-")}</td>
+      </tr>`,
+    )
+    .join("");
+  const pageReports = Array.isArray(check?.meta?.pageReports)
+    ? check.meta.pageReports
+    : [];
+  const pageReportLinks = pageReports.length
+    ? `<ul>${pageReports
+        .slice(0, 25)
+        .map(
+          (report) =>
+            `<li><a class="check-link" href="./links/pages/${escapeContent(report.name)}">${escapeContent(report.name)}</a></li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="muted">No Link-check page reports found.</p>`;
+
+  const mainReportLink = check?.meta?.reportHtmlPath
+    ? `<a class="check-link" href="./links/report.html">Open Link-check report.html</a>`
+    : `<span class="muted">No Link-check report.html found</span>`;
+
+  return `<section class="check-card">
+    <h2>Link Check Overview</h2>
+    <div class="table-wrap">
+      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
+    </div>
+    <p class="spacer-top">${mainReportLink}</p>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Broken Links</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Page</th><th>Broken URL</th><th>Status/Error</th><th>Selector</th></tr>
+        </thead>
+        <tbody>${brokenRows || "<tr><td colspan=\"4\">No broken links</td></tr>"}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Page Reports</h2>
+    ${pageReportLinks}
+  </section>`;
+}
+
+function jsonldDetailsHtml(check = {}) {
+  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const statsRows = Object.entries(stats)
+    .map(
+      ([key, value]) =>
+        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
+    )
+    .join("");
+  const issues = Array.isArray(check?.issues) ? check.issues : [];
+  const issueRows = issues
+    .slice(0, 80)
+    .map(
+      (issue) => `<tr>
+        <td>${escapeContent(issue?.severity || "-")}</td>
+        <td>${escapeContent(issue?.issueMessage || issue?.message || "-")}</td>
+        <td>${escapeContent(issue?.pagePath || issue?.file || "-")}</td>
+        <td>${escapeContent(
+          Array.isArray(issue?.fieldNames) ? issue.fieldNames.join(", ") : "-",
+        )}</td>
+      </tr>`,
+    )
+    .join("");
+  const pageReports = Array.isArray(check?.meta?.pageReports)
+    ? check.meta.pageReports
+    : [];
+  const pageReportLinks = pageReports.length
+    ? `<ul>${pageReports
+        .slice(0, 25)
+        .map(
+          (report) =>
+            `<li><a class="check-link" href="./jsonld/pages/${escapeContent(report.name)}">${escapeContent(report.name)}</a></li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="muted">No JSON-LD page-level reports found.</p>`;
+
+  const mainReportLink = check?.meta?.reportHtmlPath
+    ? `<a class="check-link" href="./jsonld/report.html">Open JSON-LD report.html</a>`
+    : `<span class="muted">No JSON-LD report.html found</span>`;
+
+  return `<section class="check-card">
+    <h2>JSON-LD Overview</h2>
+    <div class="table-wrap">
+      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
+    </div>
+    <p class="spacer-top">${mainReportLink}</p>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Top Issues</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Severity</th><th>Issue</th><th>Page</th><th>Fields</th></tr>
+        </thead>
+        <tbody>${issueRows || "<tr><td colspan=\"4\">No issues</td></tr>"}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Page Reports</h2>
+    ${pageReportLinks}
+  </section>`;
+}
+
+function securityDetailsHtml(check = {}) {
+  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const statsRows = Object.entries(stats)
+    .filter(([key]) => key !== "tools")
+    .map(
+      ([key, value]) =>
+        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
+    )
+    .join("");
+  const tools =
+    stats?.tools && typeof stats.tools === "object" ? stats.tools : {};
+  const toolRows = Object.entries(tools)
+    .map(([toolName, tool]) => {
+      const findings = Number(tool?.findings || 0);
+      return `<tr>
+        <td>${escapeContent(toolName)}</td>
+        <td>${escapeContent(tool?.status || "-")}</td>
+        <td>${escapeContent(findings)}</td>
+        <td>${escapeContent(tool?.message || "-")}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const observatoryDiagnostics = Array.isArray(
+    tools?.observatory?.details?.headerDiagnostics,
+  )
+    ? tools.observatory.details.headerDiagnostics
+    : [];
+  const diagnosticsRows = observatoryDiagnostics
+    .slice(0, 40)
+    .map(
+      (issue) => `<tr>
+        <td>${escapeContent(issue?.code || "-")}</td>
+        <td>${escapeContent(issue?.message || "-")}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const mainReportLink = check?.meta?.reportHtmlPath
+    ? `<a class="check-link" href="./security/report.html">Open Security report.html</a>`
+    : `<span class="muted">No Security report.html found</span>`;
+
+  return `<section class="check-card">
+    <h2>Security Overview</h2>
+    <div class="table-wrap">
+      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
+    </div>
+    <p class="spacer-top">${mainReportLink}</p>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Tool Findings</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Tool</th><th>Status</th><th>Findings</th><th>Notes</th></tr>
+        </thead>
+        <tbody>${toolRows || "<tr><td colspan=\"4\">No tool entries</td></tr>"}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Header Diagnostics</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Code</th><th>Message</th></tr>
+        </thead>
+        <tbody>${diagnosticsRows || "<tr><td colspan=\"2\">No diagnostics issues</td></tr>"}</tbody>
+      </table>
+    </div>
+  </section>`;
+}
+
 function formatMetricNumber(value, suffix = "") {
   const n = Number(value);
   if (!Number.isFinite(n)) return "-";
   return `${Math.round(n)}${suffix}`;
+}
+
+function formatMetricKilobytes(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "-";
+  return `${(n / 1024).toFixed(1)} KB`;
+}
+
+function formatLighthouseScore(score) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return "-";
+  return `${Math.round(n * 100)}`;
+}
+
+function encodeHrefPath(pathValue) {
+  return String(pathValue || "")
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
 }
 
 function lighthouseOverviewTableHtml(check = {}) {
@@ -115,14 +432,20 @@ function lighthouseOverviewTableHtml(check = {}) {
   const rows = metrics
     .map((item, index) => {
       const url = item?.url || "-";
-      const htmlSize = formatMetricNumber(item?.htmlSizeBytes, " B");
-      const totalSize = formatMetricNumber(item?.totalLoadedSizeBytes, " B");
+      const htmlSize = formatMetricKilobytes(item?.htmlSizeBytes);
+      const totalSize = formatMetricKilobytes(item?.totalLoadedSizeBytes);
       const loadMs = formatMetricNumber(item?.totalLoadTimeMs, " ms");
+      const perf = formatLighthouseScore(item?.scores?.performance);
+      const accessibility = formatLighthouseScore(item?.scores?.accessibility);
+      const bestPractices = formatLighthouseScore(
+        item?.scores?.bestPractices,
+      );
+      const seo = formatLighthouseScore(item?.scores?.seo);
       const reportName = item?.htmlReport || htmlReports[index]?.name || null;
       const report = reportName ? reportByName.get(reportName) : null;
       const link = reportName
         ? report
-          ? `<a class="check-link" href="./reports/${escapeContent(report.name)}">Open</a>`
+          ? `<a class="check-link" href="../lighthouse/reports/${encodeHrefPath(report.name)}">Open</a>`
           : `<span class="muted">${escapeContent(reportName)}</span>`
         : `<span class="muted">-</span>`;
       return `<tr>
@@ -130,6 +453,10 @@ function lighthouseOverviewTableHtml(check = {}) {
         <td>${escapeContent(htmlSize)}</td>
         <td>${escapeContent(totalSize)}</td>
         <td>${escapeContent(loadMs)}</td>
+        <td>${escapeContent(perf)}</td>
+        <td>${escapeContent(accessibility)}</td>
+        <td>${escapeContent(bestPractices)}</td>
+        <td>${escapeContent(seo)}</td>
         <td>${link}</td>
       </tr>`;
     })
@@ -145,7 +472,52 @@ function lighthouseOverviewTableHtml(check = {}) {
           <th>HTML size</th>
           <th>Total loaded size</th>
           <th>Total load time</th>
+          <th>Perf</th>
+          <th>A11y</th>
+          <th>Best Practices</th>
+          <th>SEO</th>
           <th>Report</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function lighthouseScoreSummaryTableHtml(check = {}) {
+  const metrics = Array.isArray(check?.metrics) ? check.metrics : [];
+  if (!metrics.length) {
+    return `<p class="muted">No Lighthouse score data available.</p>`;
+  }
+
+  const categories = [
+    { key: "performance", label: "Performance" },
+    { key: "accessibility", label: "Accessibility" },
+    { key: "bestPractices", label: "Best Practices" },
+    { key: "seo", label: "SEO" },
+    { key: "pwa", label: "PWA" },
+  ];
+
+  const rows = categories
+    .map(({ key, label }) => {
+      const values = metrics
+        .map((item) => Number(item?.scores?.[key]))
+        .filter((n) => Number.isFinite(n));
+      if (!values.length) {
+        return `<tr><th>${escapeContent(label)}</th><td>-</td><td>0</td></tr>`;
+      }
+      const average = values.reduce((sum, n) => sum + n, 0) / values.length;
+      return `<tr><th>${escapeContent(label)}</th><td>${escapeContent(formatLighthouseScore(average))}</td><td>${escapeContent(String(values.length))}</td></tr>`;
+    })
+    .join("");
+
+  return `<div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Average score (/100)</th>
+          <th>Pages</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -190,11 +562,103 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
   writeText(path.join(outDir, "index.html"), indexHtml);
 
   for (const [checkId, check] of Object.entries(checks)) {
+    if (checkId === "pa11y") {
+      if (check?.meta?.reportHtmlPath) {
+        copyFileIfExists(
+          check.meta.reportHtmlPath,
+          path.join(outDir, "pa11y", "report.html"),
+        );
+      }
+      const pa11yPages = Array.isArray(check?.meta?.pageReports)
+        ? check.meta.pageReports
+        : [];
+      for (const report of pa11yPages) {
+        if (!report?.name || !report?.path) continue;
+        copyFileIfExists(
+          report.path,
+          path.join(outDir, "pa11y", "pages", report.name),
+        );
+      }
+    }
+    if (checkId === "seo") {
+      if (check?.meta?.reportHtmlPath) {
+        copyFileIfExists(
+          check.meta.reportHtmlPath,
+          path.join(outDir, "seo", "report.html"),
+        );
+      }
+      const seoPages = Array.isArray(check?.meta?.pageReports)
+        ? check.meta.pageReports
+        : [];
+      for (const report of seoPages) {
+        if (!report?.name || !report?.path) continue;
+        copyFileIfExists(
+          report.path,
+          path.join(outDir, "seo", "pages", report.name),
+        );
+      }
+    }
+    if (checkId === "links") {
+      if (check?.meta?.reportHtmlPath) {
+        copyFileIfExists(
+          check.meta.reportHtmlPath,
+          path.join(outDir, "links", "report.html"),
+        );
+      }
+      const linkPages = Array.isArray(check?.meta?.pageReports)
+        ? check.meta.pageReports
+        : [];
+      for (const report of linkPages) {
+        if (!report?.name || !report?.path) continue;
+        copyFileIfExists(
+          report.path,
+          path.join(outDir, "links", "pages", report.name),
+        );
+      }
+    }
+    if (checkId === "jsonld") {
+      if (check?.meta?.reportHtmlPath) {
+        copyFileIfExists(
+          check.meta.reportHtmlPath,
+          path.join(outDir, "jsonld", "report.html"),
+        );
+      }
+      const jsonldPages = Array.isArray(check?.meta?.pageReports)
+        ? check.meta.pageReports
+        : [];
+      for (const report of jsonldPages) {
+        if (!report?.name || !report?.path) continue;
+        copyFileIfExists(
+          report.path,
+          path.join(outDir, "jsonld", "pages", report.name),
+        );
+      }
+    }
+    if (checkId === "security") {
+      if (check?.meta?.reportHtmlPath) {
+        copyFileIfExists(
+          check.meta.reportHtmlPath,
+          path.join(outDir, "security", "report.html"),
+        );
+      }
+    }
+
     const page = renderLayout({
       title: `Check: ${checkId}`,
       subtitle,
       navHtml: navHtml(),
-      bodyHtml: checkDetailsHtml(checkId, check),
+      bodyHtml:
+        checkId === "pa11y"
+          ? pa11yDetailsHtml(check)
+          : checkId === "seo"
+            ? seoDetailsHtml(check)
+            : checkId === "links"
+              ? linksDetailsHtml(check)
+              : checkId === "jsonld"
+                ? jsonldDetailsHtml(check)
+                : checkId === "security"
+                  ? securityDetailsHtml(check)
+            : checkDetailsHtml(checkId, check),
     });
     writeText(path.join(outDir, `${checkId}.html`), page);
   }
@@ -233,6 +697,10 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
         <div class="table-wrap">
           <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
         </div>
+      </section>
+      <section class="check-card spacer-top">
+        <h2>Category Scores</h2>
+        ${lighthouseScoreSummaryTableHtml(checks.lighthouse)}
       </section>
       <section class="check-card spacer-top">
         <h2>Per-page Metrics</h2>

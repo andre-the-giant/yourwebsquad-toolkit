@@ -161,6 +161,9 @@ We will deliver HTML first on top of the new data model, then add PDF and dashbo
 - [x] Add `src/quality/renderers/nav.mjs` for shared report navigation model.
 - [x] Replace per-script `REPORT_NAV_MODEL` usage with renderer-provided navigation for generated views.
 - [x] Ensure cross-report links are built only in renderer layer (no nav generation in check scripts).
+- [x] Add dedicated HTML detail templates for Pa11y/SEO/Links/JSON-LD/Security with artifact links copied under `reports/views/html/<runId>/`.
+- [x] Add Lighthouse detail hub (`/lighthouse/index.html`) with per-page metrics and copied page-level Lighthouse reports.
+- [x] Normalize card/detail stat formatting to avoid rendering object payloads as `[object Object]`.
 - [x] Rework `post-quality-comment` to read canonical dataset instead of per-script ad hoc files.
 - [x] Update CLI command routing to new quality modules while preserving command names.
 - [x] Add `quality list-runs` command.
@@ -207,8 +210,9 @@ We will deliver HTML first on top of the new data model, then add PDF and dashbo
 - Canonical dataset assembly was moved out of `scripts/run-quality-suite.mjs` into `src/quality/core/dataset.mjs`, and is invoked through orchestrator.
 - `run-quality-suite` now consumes orchestrator failures/dataset outputs and only performs run-id finalization for persisted dataset.
 - `run-quality-suite` now publishes `reports/` using renderer output (`quality-render`) so the active HTML UI comes from template files under `src/quality/renderers/html/templates`.
+- HTML detail rendering parity has been restored for Lighthouse, Pa11y, SEO, Links, JSON-LD, and Security (overview tables + tool/page artifact links).
+- Renderer now copies check-specific HTML artifacts into `reports/views/html/<runId>/<check>/...` to keep presentation outputs inside `views`.
 
 - Still to complete in this migration sequence:
 - Keep `run-quality-suite.mjs` as a thinner CLI shell delegating orchestration concerns to `src/quality/core/orchestrator.mjs`.
-- Move remaining report navigation/cross-link generation fully into renderer layer.
 - Add missing schema/normalizer/integration/regression tests listed in checklist.

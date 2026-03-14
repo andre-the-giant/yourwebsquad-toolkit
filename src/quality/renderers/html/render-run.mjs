@@ -200,7 +200,9 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
   }
 
   if (checks.lighthouse) {
-    const lighthouseReports = Array.isArray(checks.lighthouse?.meta?.htmlReports)
+    const lighthouseReports = Array.isArray(
+      checks.lighthouse?.meta?.htmlReports,
+    )
       ? checks.lighthouse.meta.htmlReports
       : [];
     for (const report of lighthouseReports) {

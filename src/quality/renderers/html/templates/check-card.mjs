@@ -20,8 +20,10 @@ function friendlyCheckName(checkId) {
 function statusForCheck(checkId, check = {}) {
   const stats = check?.stats || {};
   if (check.failed) {
-    if (checkId === "links") return { label: "Broken links found", tone: "fail" };
-    if (checkId === "lighthouse") return { label: "Issues found", tone: "fail" };
+    if (checkId === "links")
+      return { label: "Broken links found", tone: "fail" };
+    if (checkId === "lighthouse")
+      return { label: "Issues found", tone: "fail" };
     return { label: "Needs attention", tone: "fail" };
   }
   const warningCount = asNumber(stats.warningCount);

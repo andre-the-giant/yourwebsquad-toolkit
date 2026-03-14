@@ -97,7 +97,8 @@ function checkDetailsHtml(checkId, check = {}) {
 }
 
 function pa11yDetailsHtml(check = {}) {
-  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
   const statsRows = Object.entries(stats)
     .map(
       ([key, value]) =>
@@ -135,7 +136,8 @@ function pa11yDetailsHtml(check = {}) {
 }
 
 function seoDetailsHtml(check = {}) {
-  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
   const statsRows = Object.entries(stats)
     .map(
       ([key, value]) =>
@@ -185,7 +187,7 @@ function seoDetailsHtml(check = {}) {
         <thead>
           <tr><th>Severity</th><th>Code</th><th>Message</th><th>Page</th></tr>
         </thead>
-        <tbody>${issueRows || "<tr><td colspan=\"4\">No issues</td></tr>"}</tbody>
+        <tbody>${issueRows || '<tr><td colspan="4">No issues</td></tr>'}</tbody>
       </table>
     </div>
   </section>
@@ -196,7 +198,8 @@ function seoDetailsHtml(check = {}) {
 }
 
 function linksDetailsHtml(check = {}) {
-  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
   const statsRows = Object.entries(stats)
     .map(
       ([key, value]) =>
@@ -248,7 +251,7 @@ function linksDetailsHtml(check = {}) {
         <thead>
           <tr><th>Page</th><th>Broken URL</th><th>Status/Error</th><th>Selector</th></tr>
         </thead>
-        <tbody>${brokenRows || "<tr><td colspan=\"4\">No broken links</td></tr>"}</tbody>
+        <tbody>${brokenRows || '<tr><td colspan="4">No broken links</td></tr>'}</tbody>
       </table>
     </div>
   </section>
@@ -259,7 +262,8 @@ function linksDetailsHtml(check = {}) {
 }
 
 function jsonldDetailsHtml(check = {}) {
-  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
   const statsRows = Object.entries(stats)
     .map(
       ([key, value]) =>
@@ -311,7 +315,7 @@ function jsonldDetailsHtml(check = {}) {
         <thead>
           <tr><th>Severity</th><th>Issue</th><th>Page</th><th>Fields</th></tr>
         </thead>
-        <tbody>${issueRows || "<tr><td colspan=\"4\">No issues</td></tr>"}</tbody>
+        <tbody>${issueRows || '<tr><td colspan="4">No issues</td></tr>'}</tbody>
       </table>
     </div>
   </section>
@@ -322,7 +326,8 @@ function jsonldDetailsHtml(check = {}) {
 }
 
 function securityDetailsHtml(check = {}) {
-  const stats = check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
   const statsRows = Object.entries(stats)
     .filter(([key]) => key !== "tools")
     .map(
@@ -377,7 +382,7 @@ function securityDetailsHtml(check = {}) {
         <thead>
           <tr><th>Tool</th><th>Status</th><th>Findings</th><th>Notes</th></tr>
         </thead>
-        <tbody>${toolRows || "<tr><td colspan=\"4\">No tool entries</td></tr>"}</tbody>
+        <tbody>${toolRows || '<tr><td colspan="4">No tool entries</td></tr>'}</tbody>
       </table>
     </div>
   </section>
@@ -388,7 +393,7 @@ function securityDetailsHtml(check = {}) {
         <thead>
           <tr><th>Code</th><th>Message</th></tr>
         </thead>
-        <tbody>${diagnosticsRows || "<tr><td colspan=\"2\">No diagnostics issues</td></tr>"}</tbody>
+        <tbody>${diagnosticsRows || '<tr><td colspan="2">No diagnostics issues</td></tr>'}</tbody>
       </table>
     </div>
   </section>`;
@@ -437,9 +442,7 @@ function lighthouseOverviewTableHtml(check = {}) {
       const loadMs = formatMetricNumber(item?.totalLoadTimeMs, " ms");
       const perf = formatLighthouseScore(item?.scores?.performance);
       const accessibility = formatLighthouseScore(item?.scores?.accessibility);
-      const bestPractices = formatLighthouseScore(
-        item?.scores?.bestPractices,
-      );
+      const bestPractices = formatLighthouseScore(item?.scores?.bestPractices);
       const seo = formatLighthouseScore(item?.scores?.seo);
       const reportName = item?.htmlReport || htmlReports[index]?.name || null;
       const report = reportName ? reportByName.get(reportName) : null;
@@ -658,7 +661,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
                 ? jsonldDetailsHtml(check)
                 : checkId === "security"
                   ? securityDetailsHtml(check)
-            : checkDetailsHtml(checkId, check),
+                  : checkDetailsHtml(checkId, check),
     });
     writeText(path.join(outDir, `${checkId}.html`), page);
   }

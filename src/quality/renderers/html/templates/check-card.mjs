@@ -51,7 +51,8 @@ function friendlyStats(checkId, check = {}) {
   };
   const formatValue = (value) => {
     if (Array.isArray(value)) return `${value.length}`;
-    if (value && typeof value === "object") return `${Object.keys(value).length}`;
+    if (value && typeof value === "object")
+      return `${Object.keys(value).length}`;
     return `${value ?? "-"}`;
   };
   return Object.entries(stats)

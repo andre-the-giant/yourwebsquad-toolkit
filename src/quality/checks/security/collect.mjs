@@ -21,7 +21,9 @@ export function collectSecurityFromReportDir(reportDir, options = {}) {
     stats,
     reportHtmlPath: fs.existsSync(reportHtml) ? reportHtml : null,
     summaryMdPath: fs.existsSync(summaryMd) ? summaryMd : null,
-    observatoryJsonPath: fs.existsSync(observatoryJson) ? observatoryJson : null,
+    observatoryJsonPath: fs.existsSync(observatoryJson)
+      ? observatoryJson
+      : null,
     hasReportHtml: fs.existsSync(reportHtml),
     hasSummaryMd: fs.existsSync(summaryMd),
   };

@@ -158,7 +158,10 @@ function toReportUrl(rawUrl, { baseUrl, sourceDir }) {
     if (relativePath.startsWith("..")) return value;
     const root = `${baseUrl.replace(/\/+$/, "")}/`;
     if (relativePath.endsWith("/index.html")) {
-      return new URL(relativePath.slice(0, -"index.html".length), root).toString();
+      return new URL(
+        relativePath.slice(0, -"index.html".length),
+        root,
+      ).toString();
     }
     if (relativePath.endsWith(".html")) {
       return new URL(relativePath.slice(0, -".html".length), root).toString();

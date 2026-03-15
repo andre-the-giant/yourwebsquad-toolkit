@@ -15,7 +15,11 @@ export function reportNavLinks({ basePath = "" } = {}) {
     },
     { key: "pa11y", label: "Pa11y", href: joinBase(basePath, "pa11y.html") },
     { key: "seo", label: "SEO", href: joinBase(basePath, "seo.html") },
-    { key: "links", label: "Link check", href: joinBase(basePath, "links.html") },
+    {
+      key: "links",
+      label: "Link check",
+      href: joinBase(basePath, "links.html"),
+    },
     {
       key: "jsonld",
       label: "JSON-LD",

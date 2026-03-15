@@ -105,7 +105,7 @@ test("runQualityChecks returns dataset built from execution result", async () =>
   assert.equal(result.dataset?.context?.runId, "__pending__");
 });
 
-test("buildChecksPlanFromRunners applies jsonld local-only gating", async () => {
+test("buildChecksPlanFromRunners keeps enabled checks runnable", async () => {
   const checks = buildChecksPlanFromRunners({
     plan: [
       { id: "jsonld", name: "JSON-LD", enabled: true },
@@ -118,11 +118,11 @@ test("buildChecksPlanFromRunners applies jsonld local-only gating", async () => 
     },
   });
 
-  assert.equal(checks[0].enabled, false);
+  assert.equal(checks[0].enabled, true);
   assert.equal(checks[1].enabled, true);
 });
 
-test("runPlannedQualityChecks delegates plan+runners and logs jsonld skip", async () => {
+test("runPlannedQualityChecks delegates plan+runners", async () => {
   const logs = [];
   const result = await runPlannedQualityChecks({
     plan: [
@@ -130,6 +130,7 @@ test("runPlannedQualityChecks delegates plan+runners and logs jsonld skip", asyn
       { id: "seo", name: "SEO audit", enabled: true },
     ],
     runners: {
+      jsonld: async () => ({ summary: "jsonld done", failed: false }),
       seo: async () => ({ summary: "seo done", failed: false }),
     },
     targetUsesLocalBuild: false,
@@ -148,6 +149,5 @@ test("runPlannedQualityChecks delegates plan+runners and logs jsonld skip", asyn
   });
 
   assert.equal(result.failures.length, 0);
-  assert.equal(result.checks.jsonld, null);
-  assert.ok(logs.some((line) => line.includes("JSON-LD validation only runs")));
+  assert.equal(result.checks.jsonld?.summary, "jsonld done");
 });

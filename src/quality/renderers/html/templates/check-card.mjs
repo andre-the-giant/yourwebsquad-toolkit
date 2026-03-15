@@ -13,6 +13,7 @@ function friendlyCheckName(checkId) {
     links: "Link Check",
     jsonld: "JSON-LD",
     security: "Security",
+    sitespeed: "Sitespeed.io",
     vnu: "Nu HTML Checker",
   };
   return map[checkId] || checkId;

@@ -9,6 +9,7 @@ const CHECK_IDS = [
   "links",
   "jsonld",
   "security",
+  "sitespeed",
   "vnu",
 ];
 

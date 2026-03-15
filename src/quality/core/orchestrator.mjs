@@ -96,10 +96,7 @@ export function buildChecksPlanFromRunners({
   targetUsesLocalBuild = true,
 }) {
   return plan.map((entry) => {
-    const enabled =
-      entry.id === "jsonld"
-        ? Boolean(entry.enabled && targetUsesLocalBuild)
-        : Boolean(entry.enabled);
+    const enabled = Boolean(entry.enabled);
     return {
       id: entry.id,
       name: entry.name,
@@ -123,12 +120,6 @@ export async function runPlannedQualityChecks({
   buildDataset = null,
   datasetContext = null,
 }) {
-  if (selectedChecks?.jsonld && !targetUsesLocalBuild) {
-    logger.log(
-      "ℹ️  JSON-LD validation only runs against local build output. Skipping for remote target.",
-    );
-  }
-
   const checks = buildChecksPlanFromRunners({
     plan,
     runners,

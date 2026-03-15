@@ -38,9 +38,9 @@ body {
 }
 
 .report-nav {
-  margin-top: 12px;
+  margin-top: 10px;
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -48,8 +48,12 @@ body {
   text-decoration: none;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   color: var(--accent);
+  font-size: 13px;
+  line-height: 1.15;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--bg-elev-2) 70%, transparent);
 }
 
 .check-grid {
@@ -91,9 +95,9 @@ body {
   background: color-mix(in srgb, var(--ok) 12%, var(--bg-elev-2));
 }
 .status-chip.warn {
-  color: #f4c363;
-  border-color: color-mix(in srgb, #f4c363 40%, var(--line));
-  background: color-mix(in srgb, #f4c363 12%, var(--bg-elev-2));
+  color: #ffb35c;
+  border-color: color-mix(in srgb, #ffb35c 40%, var(--line));
+  background: color-mix(in srgb, #ffb35c 12%, var(--bg-elev-2));
 }
 .status-chip.fail {
   color: var(--fail);
@@ -139,4 +143,11 @@ td {
 
 .spacer-top {
   margin-top: 12px;
+}
+
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
 }

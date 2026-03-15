@@ -17,9 +17,16 @@ const QUIET_MODE = Boolean(args.quiet);
 const TIMEOUT_MS = Number.isFinite(args.timeoutMs)
   ? args.timeoutMs
   : DEFAULT_TIMEOUT_MS;
-const USE_TESTSSL = Boolean(
-  args.withTestssl || process.env.SECURITY_USE_TESTSSL === "1",
-);
+const SECURITY_USE_TESTSSL = process.env.SECURITY_USE_TESTSSL;
+const USE_TESTSSL = args.noTestssl
+  ? false
+  : args.withTestssl
+    ? true
+    : SECURITY_USE_TESTSSL == null
+      ? true
+      : ["1", "true", "yes", "on"].includes(
+          String(SECURITY_USE_TESTSSL).toLowerCase(),
+        );
 const TESTSSL_BIN = process.env.TESTSSL_BIN || "testssl.sh";
 
 if (args.help) {
@@ -56,6 +63,10 @@ function parseArgs(argv) {
     }
     if (arg === "--with-testssl") {
       options.withTestssl = true;
+      continue;
+    }
+    if (arg === "--no-testssl") {
+      options.noTestssl = true;
     }
   }
   return options;
@@ -64,7 +75,7 @@ function parseArgs(argv) {
 function printHelp() {
   console.log("Usage:");
   console.log(
-    "  yws-toolkit quality security [--base <url>] [--report-dir <dir>] [--timeout-ms <ms>] [--quiet] [--with-testssl]",
+    "  yws-toolkit quality security [--base <url>] [--report-dir <dir>] [--timeout-ms <ms>] [--quiet] [--with-testssl|--no-testssl]",
   );
 }
 
@@ -337,7 +348,7 @@ async function runTestssl(baseUrl) {
       status: "skipped",
       findings: 0,
       message:
-        "testssl.sh disabled (enable with --with-testssl or SECURITY_USE_TESTSSL=1).",
+        "testssl.sh disabled (--no-testssl or SECURITY_USE_TESTSSL=0).",
       details: null,
     };
   }

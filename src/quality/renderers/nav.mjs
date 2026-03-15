@@ -30,6 +30,11 @@ export function reportNavLinks({ basePath = "" } = {}) {
       label: "Security",
       href: joinBase(basePath, "security.html"),
     },
+    {
+      key: "sitespeed",
+      label: "Sitespeed",
+      href: joinBase(basePath, "sitespeed.html"),
+    },
     { key: "vnu", label: "Nu HTML", href: joinBase(basePath, "vnu.html") },
   ];
 }

@@ -11,6 +11,8 @@ import { collectJsonldFromReportDir } from "../checks/jsonld/collect.mjs";
 import { normalizeJsonldPayload } from "../checks/jsonld/normalize.mjs";
 import { collectSecurityFromReportDir } from "../checks/security/collect.mjs";
 import { normalizeSecurityPayload } from "../checks/security/normalize.mjs";
+import { collectSitespeedFromReportDir } from "../checks/sitespeed/collect.mjs";
+import { normalizeSitespeedPayload } from "../checks/sitespeed/normalize.mjs";
 import { collectVnuFromReportDir } from "../checks/vnu/collect.mjs";
 import { normalizeVnuPayload } from "../checks/vnu/normalize.mjs";
 
@@ -21,6 +23,7 @@ const CHECK_KEYS = [
   "links",
   "jsonld",
   "security",
+  "sitespeed",
   "vnu",
 ];
 
@@ -37,6 +40,7 @@ function checkFailedMap(failures = []) {
     links: failedSet.has("Link check"),
     jsonld: failedSet.has("JSON-LD validation"),
     security: failedSet.has("Security audit"),
+    sitespeed: failedSet.has("Sitespeed.io"),
     vnu: failedSet.has("Nu HTML Checker (vnu)"),
   };
 }
@@ -112,6 +116,15 @@ export function buildCanonicalDataset({
     checks.security = normalizeSecurityPayload(raw, {
       selected: true,
       failed: failed.security,
+    });
+  }
+  if (selectedChecks?.sitespeed) {
+    const raw = collectSitespeedFromReportDir(path.join(reportRoot, "sitespeed"), {
+      logPath: path.join(logRoot, "sitespeed.log"),
+    });
+    checks.sitespeed = normalizeSitespeedPayload(raw, {
+      selected: true,
+      failed: failed.sitespeed,
     });
   }
   if (selectedChecks?.vnu) {

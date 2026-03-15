@@ -44,6 +44,9 @@ import { summarizeJsonldPayload } from "../src/quality/checks/jsonld/summarize.m
 import { collectSecurityFromReportDir } from "../src/quality/checks/security/collect.mjs";
 import { normalizeSecurityPayload } from "../src/quality/checks/security/normalize.mjs";
 import { summarizeSecurityPayload } from "../src/quality/checks/security/summarize.mjs";
+import { collectSitespeedFromReportDir } from "../src/quality/checks/sitespeed/collect.mjs";
+import { normalizeSitespeedPayload } from "../src/quality/checks/sitespeed/normalize.mjs";
+import { summarizeSitespeedPayload } from "../src/quality/checks/sitespeed/summarize.mjs";
 import { collectVnuFromReportDir } from "../src/quality/checks/vnu/collect.mjs";
 import { normalizeVnuPayload } from "../src/quality/checks/vnu/normalize.mjs";
 import { summarizeVnuPayload } from "../src/quality/checks/vnu/summarize.mjs";
@@ -138,7 +141,7 @@ function openInBrowser(url) {
 
 const TEST_CHOICES = [
   {
-    name: "All (Lighthouse + Pa11y + SEO + Link check + JSON-LD + Security + Nu HTML)",
+    name: "All (Lighthouse + Pa11y + SEO + Link check + JSON-LD + Security + Sitespeed + Nu HTML)",
     value: "all",
   },
   { name: "Lighthouse", value: "lighthouse" },
@@ -147,6 +150,7 @@ const TEST_CHOICES = [
   { name: "Link check", value: "links" },
   { name: "JSON-LD validation", value: "jsonld" },
   { name: "Security audit", value: "security" },
+  { name: "Sitespeed.io", value: "sitespeed" },
   { name: "Nu HTML Checker (vnu)", value: "vnu" },
 ];
 
@@ -157,6 +161,7 @@ const CHECK_KEYS = [
   "links",
   "jsonld",
   "security",
+  "sitespeed",
   "vnu",
 ];
 const CHECK_NAME_BY_ID = {
@@ -166,6 +171,7 @@ const CHECK_NAME_BY_ID = {
   links: "Link check",
   jsonld: "JSON-LD validation",
   security: "Security audit",
+  sitespeed: "Sitespeed.io",
   vnu: "Nu HTML Checker (vnu)",
 };
 
@@ -179,6 +185,7 @@ function choiceToFlags(choice) {
       links: true,
       jsonld: true,
       security: true,
+      sitespeed: true,
       vnu: true,
     };
   }
@@ -191,6 +198,7 @@ function choiceToFlags(choice) {
     links: choice === "links",
     jsonld: choice === "jsonld",
     security: choice === "security",
+    sitespeed: choice === "sitespeed",
     vnu: choice === "vnu",
   };
 }
@@ -206,18 +214,14 @@ function buildCheckAvailability(selectedTarget) {
     pa11y: { enabled: true },
     seo: { enabled: true },
     links: { enabled: true },
-    jsonld: isRemoteTarget
-      ? {
-          enabled: false,
-          reason: "Not available on staging/production (local build only)",
-        }
-      : { enabled: true },
+    jsonld: { enabled: true },
     security: isRemoteTarget
       ? { enabled: true }
       : {
           enabled: false,
           reason: "Not available on development (requires remote server)",
         },
+    sitespeed: { enabled: true },
     vnu: { enabled: true },
   };
 }
@@ -426,6 +430,11 @@ function collectRawSources() {
       checkId: "security",
       path: path.join(REPORT_ROOT, "security"),
       name: "security",
+    },
+    {
+      checkId: "sitespeed",
+      path: path.join(REPORT_ROOT, "sitespeed"),
+      name: "sitespeed",
     },
     { checkId: "vnu", path: path.join(REPORT_ROOT, "vnu"), name: "vnu" },
   ];
@@ -711,6 +720,7 @@ function ensureCleanReports() {
     "links",
     "jsonld",
     "security",
+    "sitespeed",
     "vnu",
   ]) {
     const full = path.join(REPORT_ROOT, target);
@@ -1056,7 +1066,6 @@ async function main() {
 
   const selectionForOrder = {
     ...selectedChecks,
-    jsonld: Boolean(selectedChecks.jsonld && selectedTarget.usesLocalBuild),
   };
   const planForLabel = resolveCheckExecutionPlan({
     selectedChecks: selectionForOrder,
@@ -1319,11 +1328,14 @@ async function main() {
 
     checkRunners.jsonld = async () => {
       const reportDir = path.join(REPORT_ROOT, "jsonld");
+      const jsonldSourceArg = selectedTarget?.usesLocalBuild
+        ? "build"
+        : ".yws-jsonld-remote-source";
       const result = await runCommand(
         "node",
         [
           toolkitScriptPath("jsonld-validate.mjs"),
-          "build",
+          jsonldSourceArg,
           `--urls-file=${urlsFile}`,
           `--report-dir=${reportDir}`,
         ],
@@ -1378,6 +1390,39 @@ async function main() {
         failed: Boolean(result?.exitCode && result.exitCode !== 0),
       });
       return summarizeSecurityPayload(normalized);
+    };
+
+    checkRunners.sitespeed = async () => {
+      const result = await runCommand(
+        "node",
+        [
+          toolkitScriptPath("sitespeed-audit.mjs"),
+          "--base",
+          baseUrl,
+          "--urls-file",
+          urlsFile,
+          "--report-dir",
+          path.join(REPORT_ROOT, "sitespeed"),
+          QUIET_MODE ? "--quiet" : "",
+        ].filter(Boolean),
+        {
+          label: "Sitespeed.io",
+          logName: "sitespeed",
+          allowFailure: true,
+          forceLog: true,
+        },
+      );
+      const raw = collectSitespeedFromReportDir(
+        path.join(REPORT_ROOT, "sitespeed"),
+        {
+          logPath: result?.logPath,
+        },
+      );
+      const normalized = normalizeSitespeedPayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      return summarizeSitespeedPayload(normalized);
     };
 
     checkRunners.vnu = async () => {

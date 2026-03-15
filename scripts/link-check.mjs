@@ -157,6 +157,20 @@ function parseJsonLoose(value) {
   }
 }
 
+function isImageLikeUrl(urlString) {
+  try {
+    const url = new URL(String(urlString || ""));
+    const pathname = String(url.pathname || "").toLowerCase();
+    return /\.(png|jpe?g|gif|webp|avif|svg|ico|bmp|tiff?)$/.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isLikelyBotBlockedStatus(status) {
+  return new Set([401, 403, 429]).has(Number(status || 0));
+}
+
 async function runLinkinator(baseUrl) {
   const args = [
     "--yes",
@@ -181,7 +195,7 @@ async function runLinkinator(baseUrl) {
   }
   const payload = parseJsonLoose(result.stdout || result.stderr) || {};
   const links = Array.isArray(payload?.links) ? payload.links : [];
-  const broken = links
+  const brokenRaw = links
     .filter((entry) => String(entry?.state || "").toUpperCase() === "BROKEN")
     .map((entry) => ({
       url: entry?.url || null,
@@ -189,18 +203,36 @@ async function runLinkinator(baseUrl) {
       status: Number(entry?.status || 0) || 0,
       state: entry?.state || "BROKEN",
     }));
+  const ignored = [];
+  const broken = [];
+  for (const entry of brokenRaw) {
+    const imageLike = isImageLikeUrl(entry.url);
+    if (imageLike && isLikelyBotBlockedStatus(entry.status)) {
+      ignored.push({
+        ...entry,
+        reason: "Likely blocked by host bot-protection/hotlink policy",
+      });
+      continue;
+    }
+    broken.push(entry);
+  }
+  const ignoredCount = ignored.length;
   return {
     status:
       result.code === 0 ? "passed" : broken.length > 0 ? "failed" : "error",
     passed: Boolean(payload?.passed),
     brokenCount: broken.length,
+    ignoredCount,
     rawCount: links.length,
     broken,
+    ignored,
     message:
       broken.length > 0
         ? `Linkinator found ${broken.length} broken link(s).`
         : result.code === 0
-          ? "Linkinator found no broken links."
+          ? ignoredCount > 0
+            ? `Linkinator found no hard broken links (${ignoredCount} likely bot-blocked image URLs ignored).`
+            : "Linkinator found no broken links."
           : `Linkinator exited with code ${result.code}.`,
   };
 }

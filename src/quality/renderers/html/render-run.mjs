@@ -16,6 +16,7 @@ const KNOWN_CHECKS = new Set([
   "links",
   "jsonld",
   "security",
+  "sitespeed",
   "vnu",
 ]);
 
@@ -32,6 +33,25 @@ function copyFileIfExists(sourcePath, destinationPath) {
   if (!sourcePath || !fs.existsSync(sourcePath)) return false;
   ensureDir(path.dirname(destinationPath));
   fs.copyFileSync(sourcePath, destinationPath);
+  return true;
+}
+
+function copyDirectoryIfExists(sourcePath, destinationPath) {
+  if (!sourcePath || !fs.existsSync(sourcePath)) return false;
+  const stat = fs.statSync(sourcePath);
+  if (!stat.isDirectory()) return false;
+  ensureDir(destinationPath);
+  for (const child of fs.readdirSync(sourcePath)) {
+    const childSource = path.join(sourcePath, child);
+    const childTarget = path.join(destinationPath, child);
+    const childStat = fs.statSync(childSource);
+    if (childStat.isDirectory()) {
+      copyDirectoryIfExists(childSource, childTarget);
+    } else {
+      ensureDir(path.dirname(childTarget));
+      fs.copyFileSync(childSource, childTarget);
+    }
+  }
   return true;
 }
 
@@ -89,6 +109,52 @@ function statusPillHtml(label, tone = "info") {
       ? tone
       : "info";
   return `<span class="status-chip ${safeTone}">${escapeContent(label)}</span>`;
+}
+
+function toneForStat(key, numeric) {
+  if (["errorCount", "assertionFailures", "runFailures", "broken", "findingsTotal"].includes(key)) {
+    return numeric > 0 ? "fail" : "pass";
+  }
+  if (["warningCount", "schemaDtsWarningCount"].includes(key)) {
+    return numeric > 0 ? "warn" : "pass";
+  }
+  if (["infoCount", "urlsTested", "pagesTested", "reportsGenerated", "messagesTotal", "pagesWithIssues", "skippedExternal", "schemaDtsCheckedNodes", "schemaDtsIssueCount", "schemaDtsErrorCount", "linkinatorBroken", "brokenCombined"].includes(key)) {
+    return "info";
+  }
+  return "info";
+}
+
+function overviewPillsHtml(stats = {}, { excludeKeys = [] } = {}) {
+  const hidden = new Set(excludeKeys);
+  const pills = Object.entries(stats)
+    .filter(([key]) => !hidden.has(key))
+    .map(([key, value]) => {
+      if (value && typeof value === "object") return null;
+      const numeric = Number(value);
+      const tone = Number.isFinite(numeric) ? toneForStat(key, numeric) : "info";
+      const label = `${formatStatLabel(key)}: ${formatStatValue(value)}`;
+      return statusPillHtml(label, tone);
+    })
+    .filter(Boolean)
+    .join("");
+  return pills
+    ? `<div class="pill-row">${pills}</div>`
+    : `<p class="muted">No stats available</p>`;
+}
+
+function lighthouseScoreTone(score) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return "info";
+  const outOf100 = n <= 1 ? n * 100 : n;
+  if (outOf100 >= 90) return "pass";
+  if (outOf100 >= 50) return "warn";
+  return "fail";
+}
+
+function lighthouseScorePill(score) {
+  const value = formatLighthouseScore(score);
+  if (value === "-") return statusPillHtml("-", "info");
+  return statusPillHtml(value, lighthouseScoreTone(score));
 }
 
 function pageReportsTableHtml(checkId, check = {}) {
@@ -158,21 +224,13 @@ function checkDetailsHtml(checkId, check = {}) {
 function pa11yDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
-  const statsRows = Object.entries(stats)
-    .map(
-      ([key, value]) =>
-        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
-    )
-    .join("");
   const mainReportLink = check?.meta?.reportHtmlPath
     ? `<a class="check-link" href="./pa11y/report.html">Open Pa11y report.html</a>`
     : `<span class="muted">No Pa11y report.html found</span>`;
 
   return `<section class="check-card">
     <h2>Pa11y Overview</h2>
-    <div class="table-wrap">
-      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
-    </div>
+    ${overviewPillsHtml(stats)}
     <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
@@ -184,12 +242,6 @@ function pa11yDetailsHtml(check = {}) {
 function seoDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
-  const statsRows = Object.entries(stats)
-    .map(
-      ([key, value]) =>
-        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
-    )
-    .join("");
   const issues = Array.isArray(check?.issues) ? check.issues : [];
   const issueRows = issues
     .slice(0, 40)
@@ -208,9 +260,7 @@ function seoDetailsHtml(check = {}) {
 
   return `<section class="check-card">
     <h2>SEO Overview</h2>
-    <div class="table-wrap">
-      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
-    </div>
+    ${overviewPillsHtml(stats)}
     <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
@@ -233,12 +283,6 @@ function seoDetailsHtml(check = {}) {
 function linksDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
-  const statsRows = Object.entries(stats)
-    .map(
-      ([key, value]) =>
-        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
-    )
-    .join("");
   const linksPayload =
     check?.links && typeof check.links === "object" ? check.links : {};
   const broken = Array.isArray(linksPayload.broken) ? linksPayload.broken : [];
@@ -342,9 +386,7 @@ function linksDetailsHtml(check = {}) {
 
   return `<section class="check-card">
     <h2>Link Check Overview</h2>
-    <div class="table-wrap">
-      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
-    </div>
+    ${overviewPillsHtml(stats, { excludeKeys: ["tools"] })}
     <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
@@ -389,12 +431,6 @@ function linksDetailsHtml(check = {}) {
 function jsonldDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
-  const statsRows = Object.entries(stats)
-    .map(
-      ([key, value]) =>
-        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
-    )
-    .join("");
   const issues = Array.isArray(check?.issues) ? check.issues : [];
   const issueRows = issues
     .slice(0, 80)
@@ -415,9 +451,7 @@ function jsonldDetailsHtml(check = {}) {
 
   return `<section class="check-card">
     <h2>JSON-LD Overview</h2>
-    <div class="table-wrap">
-      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
-    </div>
+    ${overviewPillsHtml(stats)}
     <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
@@ -440,13 +474,6 @@ function jsonldDetailsHtml(check = {}) {
 function securityDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
-  const statsRows = Object.entries(stats)
-    .filter(([key]) => key !== "tools")
-    .map(
-      ([key, value]) =>
-        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
-    )
-    .join("");
   const tools =
     stats?.tools && typeof stats.tools === "object" ? stats.tools : {};
   const toolRows = Object.entries(tools)
@@ -482,9 +509,7 @@ function securityDetailsHtml(check = {}) {
 
   return `<section class="check-card">
     <h2>Security Overview</h2>
-    <div class="table-wrap">
-      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
-    </div>
+    ${overviewPillsHtml(stats, { excludeKeys: ["tools"] })}
     <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
@@ -511,29 +536,23 @@ function securityDetailsHtml(check = {}) {
   </section>`;
 }
 
+function sitespeedDetailsHtml(check = {}) {
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const reportLink = check?.meta?.indexHtmlPath
+    ? `<a class="check-link" href="./sitespeed/source/index.html">Open Sitespeed.io report</a>`
+    : `<span class="muted">No Sitespeed.io report index found</span>`;
+
+  return `<section class="check-card">
+    <h2>Sitespeed.io Overview</h2>
+    ${overviewPillsHtml(stats)}
+    <p class="spacer-top">${reportLink}</p>
+  </section>`;
+}
+
 function vnuDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
-  const statsRows = Object.entries(stats)
-    .map(([key, value]) => {
-      const numeric = Number(value);
-      if (["errorCount", "warningCount", "infoCount"].includes(key)) {
-        const count = Number.isFinite(numeric) ? numeric : 0;
-        const tone =
-          key === "errorCount"
-            ? count > 0
-              ? "fail"
-              : "pass"
-            : key === "warningCount"
-              ? count > 0
-                ? "warn"
-                : "pass"
-              : "info";
-        return `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${statusPillHtml(String(count), tone)}</td></tr>`;
-      }
-      return `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`;
-    })
-    .join("");
   const issues = Array.isArray(check?.issues) ? check.issues : [];
   const issueRows = issues
     .slice(0, 80)
@@ -561,9 +580,7 @@ function vnuDetailsHtml(check = {}) {
 
   return `<section class="check-card">
     <h2>Nu HTML Checker Overview</h2>
-    <div class="table-wrap">
-      <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
-    </div>
+    ${overviewPillsHtml(stats)}
     <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
@@ -620,10 +637,10 @@ function lighthouseOverviewTableHtml(check = {}, runBasePath = "") {
       const htmlSize = formatMetricKilobytes(item?.htmlSizeBytes);
       const totalSize = formatMetricKilobytes(item?.totalLoadedSizeBytes);
       const loadMs = formatMetricNumber(item?.totalLoadTimeMs, " ms");
-      const perf = formatLighthouseScore(item?.scores?.performance);
-      const accessibility = formatLighthouseScore(item?.scores?.accessibility);
-      const bestPractices = formatLighthouseScore(item?.scores?.bestPractices);
-      const seo = formatLighthouseScore(item?.scores?.seo);
+      const perf = lighthouseScorePill(item?.scores?.performance);
+      const accessibility = lighthouseScorePill(item?.scores?.accessibility);
+      const bestPractices = lighthouseScorePill(item?.scores?.bestPractices);
+      const seo = lighthouseScorePill(item?.scores?.seo);
       const preferredName = item?.htmlReport || null;
       const reportName = preferredName || htmlReports[index]?.name || null;
       const resolvedName = reportName
@@ -644,10 +661,10 @@ function lighthouseOverviewTableHtml(check = {}, runBasePath = "") {
         <td>${escapeContent(htmlSize)}</td>
         <td>${escapeContent(totalSize)}</td>
         <td>${escapeContent(loadMs)}</td>
-        <td>${escapeContent(perf)}</td>
-        <td>${escapeContent(accessibility)}</td>
-        <td>${escapeContent(bestPractices)}</td>
-        <td>${escapeContent(seo)}</td>
+        <td>${perf}</td>
+        <td>${accessibility}</td>
+        <td>${bestPractices}</td>
+        <td>${seo}</td>
         <td>${link}</td>
       </tr>`;
     })
@@ -698,7 +715,7 @@ function lighthouseScoreSummaryTableHtml(check = {}) {
         return `<tr><th>${escapeContent(label)}</th><td>-</td><td>0</td></tr>`;
       }
       const average = values.reduce((sum, n) => sum + n, 0) / values.length;
-      return `<tr><th>${escapeContent(label)}</th><td>${escapeContent(formatLighthouseScore(average))}</td><td>${escapeContent(String(values.length))}</td></tr>`;
+      return `<tr><th>${escapeContent(label)}</th><td>${lighthouseScorePill(average)}</td><td>${escapeContent(String(values.length))}</td></tr>`;
     })
     .join("");
 
@@ -836,6 +853,14 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
         );
       }
     }
+    if (checkId === "sitespeed") {
+      if (check?.meta?.reportDirPath) {
+        copyDirectoryIfExists(
+          check.meta.reportDirPath,
+          path.join(outDir, "sitespeed", "source"),
+        );
+      }
+    }
     if (checkId === "vnu") {
       if (check?.meta?.reportHtmlPath) {
         copyFileIfExists(
@@ -861,9 +886,11 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
                 ? jsonldDetailsHtml(check)
                 : checkId === "security"
                   ? securityDetailsHtml(check)
+                  : checkId === "sitespeed"
+                    ? sitespeedDetailsHtml(check)
                   : checkId === "vnu"
                     ? vnuDetailsHtml(check)
-                    : checkDetailsHtml(checkId, check),
+                  : checkDetailsHtml(checkId, check),
     });
     writeText(path.join(outDir, `${checkId}.html`), page);
   }
@@ -882,16 +909,10 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
       );
     }
 
-    const statsRows = Object.entries(
+    const lighthouseStats =
       checks.lighthouse?.stats && typeof checks.lighthouse.stats === "object"
         ? checks.lighthouse.stats
-        : {},
-    )
-      .map(
-        ([key, value]) =>
-          `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
-      )
-      .join("");
+        : {};
     const lighthousePage = renderLayout({
       title: "Check: Lighthouse",
       subtitle,
@@ -900,9 +921,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
       bodyHtml: `<section class="check-card">
         <h2>Lighthouse</h2>
         <p class="muted">Overview</p>
-        <div class="table-wrap">
-          <table>${statsRows || "<tr><td>No stats available</td></tr>"}</table>
-        </div>
+        ${overviewPillsHtml(lighthouseStats)}
       </section>
       <section class="check-card spacer-top">
         <h2>Category Scores</h2>

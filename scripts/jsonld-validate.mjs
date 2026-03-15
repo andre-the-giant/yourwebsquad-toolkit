@@ -95,6 +95,25 @@ function loadHtmlFilesFromUrls() {
   }
 }
 
+function loadUrlsList() {
+  if (!urlsFile || !fs.existsSync(urlsFile)) return [];
+  try {
+    const urls = JSON.parse(fs.readFileSync(urlsFile, "utf8"));
+    if (!Array.isArray(urls)) return [];
+    return urls
+      .map((entry) => {
+        try {
+          return new URL(String(entry)).toString();
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 function loadUrlByFileMap() {
   const map = new Map();
   if (!urlsFile || !fs.existsSync(urlsFile)) return map;
@@ -174,6 +193,42 @@ function inferPagePathFromFile(filePath) {
     return `/${clean}`;
   }
   return `/${relative}`;
+}
+
+function inferPagePathFromUrl(urlString) {
+  try {
+    const url = new URL(urlString);
+    const pathname = url.pathname || "/";
+    return pathname.endsWith("/") ? pathname : pathname;
+  } catch {
+    return "/";
+  }
+}
+
+function shouldSkipPagePath(pagePath) {
+  return pagePath === "/" || String(pagePath || "").startsWith("/admin");
+}
+
+async function fetchHtmlWithTimeout(url, timeoutMs = 20000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    const contentType = String(res.headers.get("content-type") || "");
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    if (!contentType.includes("text/html")) {
+      throw new Error(`Non-HTML content-type: ${contentType || "unknown"}`);
+    }
+    return await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function countBySeverity(issues, severity) {
@@ -822,17 +877,42 @@ async function loadSchemaOrgJson() {
 }
 
 async function main() {
-  if (!fs.existsSync(targetDir)) {
+  const hasLocalTarget = fs.existsSync(targetDir);
+  const urlsFromFile = loadUrlsList();
+  const processingTargets = [];
+
+  if (hasLocalTarget) {
+    const htmlFiles = loadHtmlFilesFromUrls() || readHtmlFiles(targetDir);
+    const urlByFile = loadUrlByFileMap();
+    for (const file of htmlFiles) {
+      processingTargets.push({
+        file,
+        url: urlByFile.get(file) || null,
+        pagePath: inferPagePathFromFile(file),
+      });
+    }
+  } else if (urlsFromFile.length) {
+    for (const url of urlsFromFile) {
+      processingTargets.push({
+        file: null,
+        url,
+        pagePath: inferPagePathFromUrl(url),
+      });
+    }
+  } else {
     console.error(
-      `❌ Target directory not found: ${targetDir}. Did you run "npm run build" first?`,
+      `❌ Neither local build directory (${targetDir}) nor URL list (${urlsFile}) is available.`,
     );
     process.exit(1);
   }
 
-  const htmlFiles = loadHtmlFilesFromUrls() || readHtmlFiles(targetDir);
-  const urlByFile = loadUrlByFileMap();
-  if (!htmlFiles.length) {
-    console.warn(`⚠️ No HTML files found under ${targetDir}`);
+  const filteredTargets = processingTargets.filter(
+    (target) => !shouldSkipPagePath(target.pagePath),
+  );
+  if (!filteredTargets.length) {
+    console.warn(
+      `⚠️ No HTML targets to validate (checked ${hasLocalTarget ? targetDir : urlsFile}).`,
+    );
     return;
   }
 
@@ -845,31 +925,34 @@ async function main() {
   });
 
   const pageResults = [];
-  for (const file of htmlFiles) {
-    if (
-      file === path.join(targetDir, "index.html") ||
-      file.startsWith(path.join(targetDir, "admin"))
-    ) {
-      continue;
-    }
-
-    const html = fs.readFileSync(file, "utf8");
-    const pagePath = inferPagePathFromFile(file);
+  for (const target of filteredTargets) {
+    const pagePath = target.pagePath;
+    const sourceLabel = target.file || target.url || pagePath || "unknown";
+    let html = "";
     let validationResult;
     let extractedSchema;
     let fileIssues = [];
     try {
+      if (target.file) {
+        html = fs.readFileSync(target.file, "utf8");
+      } else if (target.url) {
+        html = await fetchHtmlWithTimeout(target.url);
+      } else {
+        throw new Error("Missing file and URL target.");
+      }
       extractedSchema = extractor.parse(html);
       validationResult = await validator.validate(extractedSchema);
       fileIssues = normalizeIssues(validationResult).map((issue) => ({
         ...issue,
-        file,
+        file: sourceLabel,
+        url: target.url || null,
         pagePath,
       }));
     } catch (error) {
       fileIssues = [
         {
-          file,
+          file: sourceLabel,
+          url: target.url || null,
           pagePath,
           severity: "ERROR",
           issueMessage: `Validator crashed: ${error?.message || error}`,
@@ -881,8 +964,8 @@ async function main() {
     }
 
     pageResults.push({
-      url: urlByFile.get(file) || null,
-      file,
+      url: target.url || null,
+      file: sourceLabel,
       pagePath,
       extractedSchema: extractedSchema || null,
       issues: fileIssues,
@@ -960,7 +1043,7 @@ async function main() {
     }
   } else {
     console.log(
-      `✅ JSON-LD validation passed for ${htmlFiles.length} HTML file(s).`,
+      `✅ JSON-LD validation passed for ${pageResults.length} page(s).`,
     );
   }
 }

@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 
 const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
 const DEFAULT_REPORT_DIR =
@@ -16,6 +17,10 @@ const QUIET_MODE = Boolean(args.quiet);
 const TIMEOUT_MS = Number.isFinite(args.timeoutMs)
   ? args.timeoutMs
   : DEFAULT_TIMEOUT_MS;
+const USE_TESTSSL = Boolean(
+  args.withTestssl || process.env.SECURITY_USE_TESTSSL === "1",
+);
+const TESTSSL_BIN = process.env.TESTSSL_BIN || "testssl.sh";
 
 if (args.help) {
   printHelp();
@@ -47,6 +52,10 @@ function parseArgs(argv) {
     }
     if (arg === "--quiet") {
       options.quiet = true;
+      continue;
+    }
+    if (arg === "--with-testssl") {
+      options.withTestssl = true;
     }
   }
   return options;
@@ -55,7 +64,7 @@ function parseArgs(argv) {
 function printHelp() {
   console.log("Usage:");
   console.log(
-    "  yws-toolkit quality security [--base <url>] [--report-dir <dir>] [--timeout-ms <ms>] [--quiet]",
+    "  yws-toolkit quality security [--base <url>] [--report-dir <dir>] [--timeout-ms <ms>] [--quiet] [--with-testssl]",
   );
 }
 
@@ -243,6 +252,182 @@ async function collectHeaderDiagnostics(targetUrl) {
   }
 }
 
+function resolveCommandForSpawn(cmd) {
+  if (process.platform !== "win32") return cmd;
+  const name = String(cmd || "").toLowerCase();
+  if (name === "npm" || name === "npx") return `${cmd}.cmd`;
+  return cmd;
+}
+
+function runCommandCapture(cmd, cmdArgs, { timeoutMs = TIMEOUT_MS, quiet = true } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(resolveCommandForSpawn(cmd), cmdArgs, {
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env,
+    });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+      if (!quiet) process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      if (!quiet) process.stderr.write(chunk);
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({
+        code: 1,
+        stdout,
+        stderr,
+        timedOut,
+        error: String(error?.message || error),
+      });
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      resolve({
+        code: code ?? 1,
+        stdout,
+        stderr,
+        timedOut,
+        error: null,
+      });
+    });
+  });
+}
+
+function parseTestsslFindings(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => {
+      const severity = String(entry.severity || entry.level || "").toUpperCase();
+      const id = String(entry.id || entry.finding || entry.test || "finding");
+      const finding = String(
+        entry.finding || entry.issue || entry.details || entry.output || "",
+      ).trim();
+      return { severity, id, finding };
+    })
+    .filter((entry) => entry.finding);
+}
+
+function scoreableSeverity(severity) {
+  return new Set(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).has(
+    String(severity || "").toUpperCase(),
+  );
+}
+
+async function runTestssl(baseUrl) {
+  if (!USE_TESTSSL) {
+    return {
+      status: "skipped",
+      findings: 0,
+      message: "testssl.sh disabled (enable with --with-testssl or SECURITY_USE_TESTSSL=1).",
+      details: null,
+    };
+  }
+  let url;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return {
+      status: "error",
+      findings: 0,
+      message: "Invalid base URL for testssl.sh.",
+      details: null,
+    };
+  }
+  if (url.protocol !== "https:") {
+    return {
+      status: "skipped",
+      findings: 0,
+      message: "testssl.sh requires an HTTPS target.",
+      details: { target: url.toString() },
+    };
+  }
+
+  const target = `${url.hostname}${url.port ? `:${url.port}` : ""}`;
+  const outPath = path.join(REPORT_DIR, "testssl.json");
+  const args = [
+    "--quiet",
+    "--warnings",
+    "off",
+    "--jsonfile-pretty",
+    outPath,
+    target,
+  ];
+  const run = await runCommandCapture(TESTSSL_BIN, args, {
+    timeoutMs: TIMEOUT_MS,
+    quiet: QUIET_MODE,
+  });
+  if (run.error) {
+    return {
+      status: "error",
+      findings: 0,
+      message: `testssl.sh failed to start: ${run.error}`,
+      details: { target, outputPath: outPath },
+    };
+  }
+  if (run.timedOut) {
+    return {
+      status: "error",
+      findings: 0,
+      message: "testssl.sh timed out.",
+      details: { target, outputPath: outPath },
+    };
+  }
+  if (!fs.existsSync(outPath)) {
+    return {
+      status: run.code === 0 ? "passed" : "error",
+      findings: 0,
+      message:
+        run.code === 0
+          ? "testssl.sh completed without JSON output."
+          : `testssl.sh exited with code ${run.code}.`,
+      details: { target, outputPath: outPath },
+    };
+  }
+
+  let payload = [];
+  try {
+    payload = JSON.parse(fs.readFileSync(outPath, "utf8"));
+  } catch (error) {
+    return {
+      status: "error",
+      findings: 0,
+      message: `Could not parse testssl.sh JSON: ${error?.message || error}`,
+      details: { target, outputPath: outPath },
+    };
+  }
+  const findings = parseTestsslFindings(payload);
+  const scored = findings.filter((entry) => scoreableSeverity(entry.severity));
+  const top = scored.slice(0, 30);
+
+  return {
+    status: scored.length > 0 ? "failed" : "passed",
+    findings: scored.length,
+    message:
+      scored.length > 0
+        ? `testssl.sh found ${scored.length} SSL/TLS issue(s).`
+        : "testssl.sh found no SSL/TLS issues.",
+    details: {
+      target,
+      outputPath: outPath,
+      findings: top,
+      rawCount: findings.length,
+      exitCode: run.code,
+    },
+  };
+}
+
 async function fetchObservatoryScan(host) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -381,10 +566,15 @@ async function runObservatory(baseUrl) {
   };
 }
 
-function writeMarkdownSummary(baseUrl, observatory, statsPath) {
+function writeMarkdownSummary(baseUrl, stats, statsPath) {
+  const observatory = stats?.tools?.observatory || {};
+  const testssl = stats?.tools?.testssl || {};
   const details = observatory?.details || {};
   const diagnostics = Array.isArray(details.headerDiagnostics)
     ? details.headerDiagnostics
+    : [];
+  const testsslFindings = Array.isArray(testssl?.details?.findings)
+    ? testssl.details.findings
     : [];
   const lines = [
     "# Security audit report",
@@ -393,7 +583,8 @@ function writeMarkdownSummary(baseUrl, observatory, statsPath) {
     "",
     "| Tool | Status | Findings | Notes |",
     "| --- | --- | --- | --- |",
-    `| observatory | ${observatory.status} | ${Number(observatory.findings || 0)} | ${observatory.message || ""} |`,
+    `| observatory | ${observatory.status || "skipped"} | ${Number(observatory.findings || 0)} | ${observatory.message || ""} |`,
+    `| testssl | ${testssl.status || "skipped"} | ${Number(testssl.findings || 0)} | ${testssl.message || ""} |`,
     "",
     "## Observatory details",
     "",
@@ -416,6 +607,17 @@ function writeMarkdownSummary(baseUrl, observatory, statsPath) {
       ? `- Diagnostics warning: ${details.diagnosticsError}`
       : "",
     "",
+    "## testssl.sh findings",
+    "",
+    testsslFindings.length
+      ? testsslFindings
+          .map(
+            (entry) =>
+              `- [${entry.severity || "INFO"}] ${entry.id || "finding"}: ${entry.finding || ""}`,
+          )
+          .join("\n")
+      : "- No testssl findings recorded.",
+    "",
     `Stats JSON: ${statsPath}`,
     "",
   ];
@@ -424,17 +626,19 @@ function writeMarkdownSummary(baseUrl, observatory, statsPath) {
   return summaryPath;
 }
 
-function writeHtmlSummary(baseUrl, observatory, findingsTotal) {
+function writeHtmlSummary(baseUrl, stats) {
+  const observatory = stats?.tools?.observatory || {};
+  const testssl = stats?.tools?.testssl || {};
+  const findingsTotal = Number(stats?.findingsTotal || 0);
   const details = observatory?.details || {};
   const diagnostics = Array.isArray(details.headerDiagnostics)
     ? details.headerDiagnostics
     : [];
-  const rowClass =
-    observatory.status === "passed"
-      ? "ok"
-      : observatory.status === "skipped"
-        ? "skip"
-        : "bad";
+  const testsslFindings = Array.isArray(testssl?.details?.findings)
+    ? testssl.details.findings
+    : [];
+  const rowClassFor = (status) =>
+    status === "passed" ? "ok" : status === "skipped" ? "skip" : "bad";
 
   const detailItems = [
     `<li><strong>Grade:</strong> ${escapeHtml(details.grade || "-")}</li>`,
@@ -519,11 +723,17 @@ function writeHtmlSummary(baseUrl, observatory, findingsTotal) {
       <tr><th>Tool</th><th>Status</th><th>Findings</th><th>Notes</th></tr>
     </thead>
     <tbody>
-      <tr class="${rowClass}">
+      <tr class="${rowClassFor(observatory.status)}">
         <td>observatory</td>
         <td>${escapeHtml(observatory.status)}</td>
         <td>${Number(observatory.findings || 0)}</td>
         <td>${escapeHtml(observatory.message || "")}</td>
+      </tr>
+      <tr class="${rowClassFor(testssl.status)}">
+        <td>testssl</td>
+        <td>${escapeHtml(testssl.status || "skipped")}</td>
+        <td>${Number(testssl.findings || 0)}</td>
+        <td>${escapeHtml(testssl.message || "")}</td>
       </tr>
     </tbody>
   </table>
@@ -533,6 +743,19 @@ function writeHtmlSummary(baseUrl, observatory, findingsTotal) {
     <h3>Header diagnostics (heuristic)</h3>
     ${diagnosticsList}
     ${details.diagnosticsError ? `<p>Diagnostics warning: ${escapeHtml(details.diagnosticsError)}</p>` : ""}
+  </section>
+  <section class="details">
+    <h2>testssl.sh findings</h2>
+    ${
+      testsslFindings.length
+        ? `<ul>${testsslFindings
+            .map(
+              (entry) =>
+                `<li><code>${escapeHtml(entry.severity || "INFO")}</code> <strong>${escapeHtml(entry.id || "finding")}:</strong> ${escapeHtml(entry.finding || "")}</li>`,
+            )
+            .join("")}</ul>`
+        : "<p>No testssl findings recorded.</p>"
+    }
   </section>
 </body>
 </html>`;
@@ -552,33 +775,33 @@ async function main() {
   console.log(`🔐 Running security audit against ${normalizedBaseUrl}`);
 
   const observatory = await runObservatory(normalizedBaseUrl);
-  const findingsTotal = Number(observatory.findings || 0);
-  const failed =
-    observatory.status === "failed" || observatory.status === "error";
+  const testssl = await runTestssl(normalizedBaseUrl);
+  const findingsTotal =
+    Number(observatory.findings || 0) + Number(testssl.findings || 0);
+  const failedTools = [
+    ["observatory", observatory],
+    ["testssl", testssl],
+  ]
+    .filter(([, result]) => result?.status === "failed" || result?.status === "error")
+    .map(([name]) => name);
+  const failed = failedTools.length > 0;
 
   const stats = {
     baseUrl: normalizedBaseUrl,
     generatedAt: new Date().toISOString(),
     findingsTotal,
     failed,
-    failedTools: failed ? ["observatory"] : [],
+    failedTools,
     tools: {
       observatory,
+      testssl,
     },
   };
 
   const statsPath = path.join(REPORT_DIR, "stats.json");
   writeJson(statsPath, stats);
-  const summaryPath = writeMarkdownSummary(
-    normalizedBaseUrl,
-    observatory,
-    statsPath,
-  );
-  const reportPath = writeHtmlSummary(
-    normalizedBaseUrl,
-    observatory,
-    findingsTotal,
-  );
+  const summaryPath = writeMarkdownSummary(normalizedBaseUrl, stats, statsPath);
+  const reportPath = writeHtmlSummary(normalizedBaseUrl, stats);
 
   console.log(`📄 Security summary (md): ${summaryPath}`);
   console.log(`📄 Security report (html): ${reportPath}`);

@@ -34,8 +34,10 @@
     "pa11y": "^9.0.1",
     "prettier": "^3.3.3",
     "prettier-plugin-astro": "^0.14.1",
+    "schema-dts": "^1.1.5",
     "semver": "^7.6.2",
     "serve": "^14.2.5",
+    "typescript": "^5.9.3",
     "wait-on": "^9.0.3"
   }
 }

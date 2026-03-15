@@ -20,6 +20,7 @@ export function normalizeSecurityPayload(raw, options = {}) {
       reportHtmlPath: raw?.reportHtmlPath || null,
       summaryMdPath: raw?.summaryMdPath || null,
       observatoryJsonPath: raw?.observatoryJsonPath || null,
+      testsslJsonPath: raw?.testsslJsonPath || null,
     },
   };
 }

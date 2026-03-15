@@ -2,8 +2,14 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import Validator from "@adobe/structured-data-validator";
 import WebAutoExtractor from "@marbec/web-auto-extractor";
+
+const require = createRequire(import.meta.url);
+const toolkitRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const argv = process.argv.slice(2);
 const targetDir = path.resolve(
@@ -381,7 +387,159 @@ function jsonldOnlyFromExtractedSchema(extractedSchema) {
   return null;
 }
 
-function writeJsonldArtifacts(pageResults, issues) {
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function schemaDtsNodesFromExtractedSchema(extractedSchema) {
+  const jsonld = jsonldOnlyFromExtractedSchema(extractedSchema);
+  if (!jsonld) return [];
+  if (Array.isArray(jsonld)) {
+    return jsonld.filter((node) => node && typeof node === "object");
+  }
+  if (jsonld && typeof jsonld === "object") {
+    return [jsonld];
+  }
+  return [];
+}
+
+function resolveTypescriptBin() {
+  try {
+    return require.resolve("typescript/bin/tsc");
+  } catch {
+    return null;
+  }
+}
+
+function parseTypeScriptDiagnostics(output, sourceFilePath, nodeLineRanges) {
+  const lines = String(output || "").split(/\r?\n/);
+  const issues = [];
+  const escapedPath = escapeRegExp(sourceFilePath);
+  const pattern = new RegExp(
+    `^${escapedPath}\\((\\d+),(\\d+)\\): error TS\\d+: (.+)$`,
+  );
+  for (const line of lines) {
+    const match = line.match(pattern);
+    if (!match) continue;
+    const lineNo = Number(match[1]);
+    const colNo = Number(match[2]);
+    const message = String(match[3] || "TypeScript schema-dts validation error");
+    const nodeRange = nodeLineRanges.find(
+      (entry) => lineNo >= entry.startLine && lineNo <= entry.endLine,
+    );
+    if (!nodeRange) continue;
+    issues.push({
+      file: nodeRange.file,
+      pagePath: nodeRange.pagePath,
+      url: nodeRange.url || null,
+      severity: "WARNING",
+      issueMessage: `schema-dts: ${message}`,
+      fieldNames: [],
+      path: ["jsonld", `node[${nodeRange.nodeIndex}]`],
+      location: `line ${lineNo}, col ${colNo}`,
+      checker: "schema-dts",
+    });
+  }
+  return issues;
+}
+
+function runSchemaDtsValidation(pageResults, { strict = false } = {}) {
+  const entries = [];
+  for (const page of pageResults) {
+    const nodes = schemaDtsNodesFromExtractedSchema(page.extractedSchema);
+    for (let i = 0; i < nodes.length; i += 1) {
+      entries.push({
+        file: page.file,
+        pagePath: page.pagePath,
+        url: page.url || null,
+        nodeIndex: i,
+        node: nodes[i],
+      });
+    }
+  }
+  if (!entries.length) {
+    return {
+      checkedNodes: 0,
+      issues: [],
+      errorCount: 0,
+      warningCount: 0,
+      skipped: false,
+    };
+  }
+
+  const tscBin = resolveTypescriptBin();
+  if (!tscBin) {
+    return {
+      checkedNodes: entries.length,
+      issues: [],
+      errorCount: 0,
+      warningCount: 0,
+      skipped: true,
+      reason: "TypeScript compiler not available in toolkit dependencies.",
+    };
+  }
+
+  const cacheRoot = path.join(toolkitRoot, ".yws-cache", "jsonld-schema-dts");
+  fs.mkdirSync(cacheRoot, { recursive: true });
+  const sourcePath = path.join(cacheRoot, "schema-dts-check.ts");
+  const nodeLineRanges = [];
+  let source = `import type { Thing, WithContext } from "schema-dts";\n`;
+  source += `type SchemaDtsNode = Thing | WithContext<Thing>;\n\n`;
+  let currentLine = source.split("\n").length;
+
+  entries.forEach((entry, index) => {
+    const variableName = `node_${index + 1}`;
+    const assignment = `const ${variableName}: SchemaDtsNode = ${safeJsonStringify(entry.node)};\n`;
+    const startLine = currentLine;
+    const lineCount = assignment.split("\n").length - 1;
+    const endLine = startLine + lineCount - 1;
+    nodeLineRanges.push({
+      ...entry,
+      startLine,
+      endLine,
+    });
+    source += assignment;
+    currentLine += lineCount;
+  });
+
+  fs.writeFileSync(sourcePath, source, "utf8");
+  const args = [
+    tscBin,
+    "--pretty",
+    "false",
+    "--noEmit",
+    "--skipLibCheck",
+    "--target",
+    "ES2022",
+    sourcePath,
+  ];
+  const tsc = spawnSync(process.execPath, args, {
+    cwd: toolkitRoot,
+    encoding: "utf8",
+  });
+  const diagnostics = parseTypeScriptDiagnostics(
+    `${tsc.stdout || ""}\n${tsc.stderr || ""}`,
+    sourcePath,
+    nodeLineRanges,
+  );
+  const issues = diagnostics.map((issue) =>
+    strict ? { ...issue, severity: "ERROR" } : issue,
+  );
+  const errorCount = issues.filter((issue) => issue.severity === "ERROR").length;
+  const warningCount = issues.filter(
+    (issue) => issue.severity === "WARNING",
+  ).length;
+
+  return {
+    checkedNodes: entries.length,
+    issues,
+    errorCount,
+    warningCount,
+    skipped: false,
+  };
+}
+
+function writeJsonldArtifacts(pageResults, issues, schemaDtsSummary = {}) {
   const errorCount = countBySeverity(issues, "ERROR");
   const warningCount = countBySeverity(issues, "WARNING");
   const filesWithErrors = new Set(
@@ -407,6 +565,13 @@ function writeJsonldArtifacts(pageResults, issues) {
         warningCount,
         filesWithErrors,
         filesWithWarnings,
+        schemaDtsCheckedNodes: Number(schemaDtsSummary.checkedNodes || 0),
+        schemaDtsIssueCount: Number(
+          (schemaDtsSummary.errorCount || 0) +
+            (schemaDtsSummary.warningCount || 0),
+        ),
+        schemaDtsErrorCount: Number(schemaDtsSummary.errorCount || 0),
+        schemaDtsWarningCount: Number(schemaDtsSummary.warningCount || 0),
       },
       null,
       2,
@@ -665,6 +830,7 @@ async function main() {
   }
 
   const schemaOrgJson = await loadSchemaOrgJson();
+  const schemaDtsStrict = process.env.JSONLD_SCHEMA_DTS_STRICT === "1";
   const validator = new Validator(schemaOrgJson);
   const extractor = new WebAutoExtractor({
     addLocation: true,
@@ -718,8 +884,37 @@ async function main() {
     });
   }
 
+  const schemaDtsSummary = runSchemaDtsValidation(pageResults, {
+    strict: schemaDtsStrict,
+  });
+  if (schemaDtsSummary.skipped) {
+    console.warn(
+      `⚠️ schema-dts check skipped: ${schemaDtsSummary.reason || "unknown reason"}`,
+    );
+  } else if (schemaDtsSummary.checkedNodes > 0) {
+    const issueCount =
+      Number(schemaDtsSummary.errorCount || 0) +
+      Number(schemaDtsSummary.warningCount || 0);
+    console.log(
+      `ℹ️ schema-dts checked ${schemaDtsSummary.checkedNodes} node(s), found ${issueCount} issue(s).`,
+    );
+  }
+  if (Array.isArray(schemaDtsSummary.issues) && schemaDtsSummary.issues.length) {
+    const byFile = new Map(pageResults.map((page) => [page.file, page]));
+    for (const issue of schemaDtsSummary.issues) {
+      const page = byFile.get(issue.file);
+      if (page) {
+        page.issues.push(issue);
+      }
+    }
+    for (const page of pageResults) {
+      page.errorCount = countBySeverity(page.issues, "ERROR");
+      page.warningCount = countBySeverity(page.issues, "WARNING");
+    }
+  }
+
   const issues = pageResults.flatMap((page) => page.issues);
-  writeJsonldArtifacts(pageResults, issues);
+  writeJsonldArtifacts(pageResults, issues, schemaDtsSummary);
   writeJsonldPageReports(pageResults);
   writeJsonldSummaryReport(pageResults);
   writeJsonldTextReport(pageResults, issues);

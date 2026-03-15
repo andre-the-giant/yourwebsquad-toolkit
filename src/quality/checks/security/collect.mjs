@@ -15,6 +15,7 @@ export function collectSecurityFromReportDir(reportDir, options = {}) {
   const reportHtml = path.join(reportDir, "report.html");
   const summaryMd = path.join(reportDir, "SUMMARY.md");
   const observatoryJson = path.join(reportDir, "observatory.json");
+  const testsslJson = path.join(reportDir, "testssl.json");
   return {
     reportDir,
     logPath: options.logPath || null,
@@ -24,6 +25,7 @@ export function collectSecurityFromReportDir(reportDir, options = {}) {
     observatoryJsonPath: fs.existsSync(observatoryJson)
       ? observatoryJson
       : null,
+    testsslJsonPath: fs.existsSync(testsslJson) ? testsslJson : null,
     hasReportHtml: fs.existsSync(reportHtml),
     hasSummaryMd: fs.existsSync(summaryMd),
   };

@@ -322,12 +322,14 @@ When JSON-LD validation is selected on `development`, reports are generated unde
 `yws-toolkit quality security` runs:
 
 - MDN HTTP Observatory (`@mdn/mdn-http-observatory`)
+- `testssl.sh` (optional; enable with `--with-testssl` or `SECURITY_USE_TESTSSL=1`)
 
 Generated files:
 
 - `reports/security/report.html`
 - `reports/security/SUMMARY.md`
 - `reports/security/stats.json`
+- `reports/security/testssl.json` (when testssl is enabled)
 
 ## Release / versioning
 

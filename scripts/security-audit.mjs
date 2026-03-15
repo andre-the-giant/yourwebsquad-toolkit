@@ -3,6 +3,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const TOOLKIT_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+const BUNDLED_TESTSSL_BIN = path.join(
+  TOOLKIT_ROOT,
+  "tools",
+  "testssl.sh",
+  "testssl.sh",
+);
 
 const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
 const DEFAULT_REPORT_DIR =
@@ -27,7 +39,9 @@ const USE_TESTSSL = args.noTestssl
       : ["1", "true", "yes", "on"].includes(
           String(SECURITY_USE_TESTSSL).toLowerCase(),
         );
-const TESTSSL_BIN = process.env.TESTSSL_BIN || "testssl.sh";
+const TESTSSL_BIN =
+  process.env.TESTSSL_BIN ||
+  (fs.existsSync(BUNDLED_TESTSSL_BIN) ? BUNDLED_TESTSSL_BIN : "testssl.sh");
 
 if (args.help) {
   printHelp();

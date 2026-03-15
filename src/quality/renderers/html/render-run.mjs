@@ -515,26 +515,24 @@ function vnuDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
   const statsRows = Object.entries(stats)
-    .map(
-      ([key, value]) => {
-        const numeric = Number(value);
-        if (["errorCount", "warningCount", "infoCount"].includes(key)) {
-          const count = Number.isFinite(numeric) ? numeric : 0;
-          const tone =
-            key === "errorCount"
+    .map(([key, value]) => {
+      const numeric = Number(value);
+      if (["errorCount", "warningCount", "infoCount"].includes(key)) {
+        const count = Number.isFinite(numeric) ? numeric : 0;
+        const tone =
+          key === "errorCount"
+            ? count > 0
+              ? "fail"
+              : "pass"
+            : key === "warningCount"
               ? count > 0
-                ? "fail"
+                ? "warn"
                 : "pass"
-              : key === "warningCount"
-                ? count > 0
-                  ? "warn"
-                  : "pass"
-                : "info";
-          return `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${statusPillHtml(String(count), tone)}</td></tr>`;
-        }
-        return `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`;
-      },
-    )
+              : "info";
+        return `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${statusPillHtml(String(count), tone)}</td></tr>`;
+      }
+      return `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`;
+    })
     .join("");
   const issues = Array.isArray(check?.issues) ? check.issues : [];
   const issueRows = issues

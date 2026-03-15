@@ -191,11 +191,7 @@ async function runLinkinator(baseUrl) {
     }));
   return {
     status:
-      result.code === 0
-        ? "passed"
-        : broken.length > 0
-          ? "failed"
-          : "error",
+      result.code === 0 ? "passed" : broken.length > 0 ? "failed" : "error",
     passed: Boolean(payload?.passed),
     brokenCount: broken.length,
     rawCount: links.length,
@@ -1051,7 +1047,8 @@ async function main() {
     );
 
     const linkinator = await runLinkinator(BASE_URL);
-    const combinedBrokenCount = broken.length + Number(linkinator.brokenCount || 0);
+    const combinedBrokenCount =
+      broken.length + Number(linkinator.brokenCount || 0);
 
     ensureDir(REPORT_DIR);
 

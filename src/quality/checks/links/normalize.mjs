@@ -12,7 +12,8 @@ function brokenCount(links) {
 
 export function normalizeLinksPayload(raw, options = {}) {
   const links = raw?.links || null;
-  const tools = links?.tools && typeof links.tools === "object" ? links.tools : {};
+  const tools =
+    links?.tools && typeof links.tools === "object" ? links.tools : {};
   const broken = brokenCount(links);
   const linkinatorBroken = toNumber(tools?.linkinator?.brokenCount);
   const combinedBroken =

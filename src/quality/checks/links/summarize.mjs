@@ -7,7 +7,8 @@ export function summarizeLinksPayload(payload) {
   const stats = payload?.stats || {};
   const internalBroken = toNumber(stats.broken);
   const linkinatorBroken = toNumber(stats.linkinatorBroken);
-  const broken = toNumber(stats.brokenCombined) || internalBroken + linkinatorBroken;
+  const broken =
+    toNumber(stats.brokenCombined) || internalBroken + linkinatorBroken;
   const failed = Boolean(payload?.failed) || broken > 0;
 
   if (!stats || Object.keys(stats).length === 0) {

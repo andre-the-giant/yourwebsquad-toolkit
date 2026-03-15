@@ -83,6 +83,58 @@ function formatStatValue(value) {
   return String(value);
 }
 
+function statusPillHtml(label, tone = "info") {
+  const safeTone =
+    tone === "pass" || tone === "warn" || tone === "fail" || tone === "info"
+      ? tone
+      : "info";
+  return `<span class="status-chip ${safeTone}">${escapeContent(label)}</span>`;
+}
+
+function pageReportsTableHtml(checkId, check = {}) {
+  const summaries = Array.isArray(check?.meta?.pageSummaries)
+    ? check.meta.pageSummaries
+    : [];
+  if (!summaries.length) {
+    return `<p class="muted">No page-level reports found.</p>`;
+  }
+
+  const rows = summaries
+    .slice(0, 200)
+    .map((page) => {
+      const errors = Number.isFinite(Number(page?.errors))
+        ? Number(page.errors)
+        : 0;
+      const warnings = Number.isFinite(Number(page?.warnings))
+        ? Number(page.warnings)
+        : 0;
+      const hasIssues = errors + warnings > 0;
+      const status = hasIssues
+        ? statusPillHtml(`${errors + warnings} issue(s)`, errors > 0 ? "fail" : "warn")
+        : statusPillHtml("No issue", "pass");
+      const reportCell = hasIssues
+        ? `<a class="check-link" href="./${escapeContent(checkId)}/pages/${escapeContent(page?.name || "")}">Open</a>`
+        : `<span class="muted">-</span>`;
+      return `<tr>
+        <td>${escapeContent(page?.label || page?.name || "-")}</td>
+        <td>${escapeContent(String(errors))}</td>
+        <td>${escapeContent(String(warnings))}</td>
+        <td>${status}</td>
+        <td>${reportCell}</td>
+      </tr>`;
+    })
+    .join("");
+
+  return `<div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Page</th><th>Errors</th><th>Warnings</th><th>Status</th><th>Report</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
 function checkDetailsHtml(checkId, check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
@@ -109,19 +161,6 @@ function pa11yDetailsHtml(check = {}) {
         `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
     )
     .join("");
-  const pageReports = Array.isArray(check?.meta?.pageReports)
-    ? check.meta.pageReports
-    : [];
-  const pageReportLinks = pageReports.length
-    ? `<ul>${pageReports
-        .slice(0, 25)
-        .map(
-          (report) =>
-            `<li><a class="check-link" href="./pa11y/pages/${escapeContent(report.name)}">${escapeContent(report.name)}</a></li>`,
-        )
-        .join("")}</ul>`
-    : `<p class="muted">No Pa11y page-level reports found.</p>`;
-
   const mainReportLink = check?.meta?.reportHtmlPath
     ? `<a class="check-link" href="./pa11y/report.html">Open Pa11y report.html</a>`
     : `<span class="muted">No Pa11y report.html found</span>`;
@@ -135,7 +174,7 @@ function pa11yDetailsHtml(check = {}) {
   </section>
   <section class="check-card spacer-top">
     <h2>Page Reports</h2>
-    ${pageReportLinks}
+    ${pageReportsTableHtml("pa11y", check)}
   </section>`;
 }
 
@@ -160,19 +199,6 @@ function seoDetailsHtml(check = {}) {
       </tr>`,
     )
     .join("");
-  const pageReports = Array.isArray(check?.meta?.pageReports)
-    ? check.meta.pageReports
-    : [];
-  const pageReportLinks = pageReports.length
-    ? `<ul>${pageReports
-        .slice(0, 25)
-        .map(
-          (report) =>
-            `<li><a class="check-link" href="./seo/pages/${escapeContent(report.name)}">${escapeContent(report.name)}</a></li>`,
-        )
-        .join("")}</ul>`
-    : `<p class="muted">No SEO page-level reports found.</p>`;
-
   const mainReportLink = check?.meta?.reportHtmlPath
     ? `<a class="check-link" href="./seo/report.html">Open SEO report.html</a>`
     : `<span class="muted">No SEO report.html found</span>`;
@@ -197,7 +223,7 @@ function seoDetailsHtml(check = {}) {
   </section>
   <section class="check-card spacer-top">
     <h2>Page Reports</h2>
-    ${pageReportLinks}
+    ${pageReportsTableHtml("seo", check)}
   </section>`;
 }
 
@@ -288,19 +314,6 @@ function jsonldDetailsHtml(check = {}) {
       </tr>`,
     )
     .join("");
-  const pageReports = Array.isArray(check?.meta?.pageReports)
-    ? check.meta.pageReports
-    : [];
-  const pageReportLinks = pageReports.length
-    ? `<ul>${pageReports
-        .slice(0, 25)
-        .map(
-          (report) =>
-            `<li><a class="check-link" href="./jsonld/pages/${escapeContent(report.name)}">${escapeContent(report.name)}</a></li>`,
-        )
-        .join("")}</ul>`
-    : `<p class="muted">No JSON-LD page-level reports found.</p>`;
-
   const mainReportLink = check?.meta?.reportHtmlPath
     ? `<a class="check-link" href="./jsonld/report.html">Open JSON-LD report.html</a>`
     : `<span class="muted">No JSON-LD report.html found</span>`;
@@ -325,7 +338,7 @@ function jsonldDetailsHtml(check = {}) {
   </section>
   <section class="check-card spacer-top">
     <h2>Page Reports</h2>
-    ${pageReportLinks}
+    ${pageReportsTableHtml("jsonld", check)}
   </section>`;
 }
 

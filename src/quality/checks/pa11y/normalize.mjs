@@ -21,6 +21,7 @@ export function normalizePa11yPayload(raw, options = {}) {
       reportHtmlPath: raw?.reportHtmlPath || null,
       summaryMdPath: raw?.summaryMdPath || null,
       pageReports: Array.isArray(raw?.pageReports) ? raw.pageReports : [],
+      pageSummaries: Array.isArray(raw?.pageSummaries) ? raw.pageSummaries : [],
     },
   };
 }

@@ -27,6 +27,7 @@ export function normalizeJsonldPayload(raw, options = {}) {
       reportHtmlPath: raw?.reportHtmlPath || null,
       reportTextPath: raw?.reportTextPath || null,
       pageReports: Array.isArray(raw?.pageReports) ? raw.pageReports : [],
+      pageSummaries: Array.isArray(raw?.pageSummaries) ? raw.pageSummaries : [],
     },
   };
 }

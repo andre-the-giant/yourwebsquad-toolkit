@@ -207,7 +207,8 @@ function pageReportsTableHtml(checkId, check = {}) {
             errors > 0 ? "fail" : "warn",
           )
         : statusPillHtml("No issue", "pass");
-      const canOpenReport = Boolean(page?.name) && (hasIssues || alwaysShowReportLink);
+      const canOpenReport =
+        Boolean(page?.name) && (hasIssues || alwaysShowReportLink);
       const reportCell = canOpenReport
         ? `<a class="report-link-btn" href="./${escapeContent(checkId)}/pages/${escapeContent(page?.name || "")}">Open</a>`
         : `<span class="muted">-</span>`;

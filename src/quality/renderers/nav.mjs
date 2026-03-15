@@ -7,7 +7,9 @@ function joinBase(basePath, targetPath) {
 
 export function reportNavLinks({ basePath = "", selectedChecks = [] } = {}) {
   const selected = new Set(selectedChecks);
-  const nav = [{ key: "home", label: "Home", href: joinBase(basePath, "index.html") }];
+  const nav = [
+    { key: "home", label: "Home", href: joinBase(basePath, "index.html") },
+  ];
   const checkLinks = [
     {
       key: "lighthouse",

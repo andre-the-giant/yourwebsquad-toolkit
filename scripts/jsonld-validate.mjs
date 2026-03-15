@@ -9,7 +9,10 @@ import Validator from "@adobe/structured-data-validator";
 import WebAutoExtractor from "@marbec/web-auto-extractor";
 
 const require = createRequire(import.meta.url);
-const toolkitRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const toolkitRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 
 const argv = process.argv.slice(2);
 const targetDir = path.resolve(
@@ -423,7 +426,9 @@ function parseTypeScriptDiagnostics(output, sourceFilePath, nodeLineRanges) {
     if (!match) continue;
     const lineNo = Number(match[1]);
     const colNo = Number(match[2]);
-    const message = String(match[3] || "TypeScript schema-dts validation error");
+    const message = String(
+      match[3] || "TypeScript schema-dts validation error",
+    );
     const nodeRange = nodeLineRanges.find(
       (entry) => lineNo >= entry.startLine && lineNo <= entry.endLine,
     );
@@ -525,7 +530,9 @@ function runSchemaDtsValidation(pageResults, { strict = false } = {}) {
   const issues = diagnostics.map((issue) =>
     strict ? { ...issue, severity: "ERROR" } : issue,
   );
-  const errorCount = issues.filter((issue) => issue.severity === "ERROR").length;
+  const errorCount = issues.filter(
+    (issue) => issue.severity === "ERROR",
+  ).length;
   const warningCount = issues.filter(
     (issue) => issue.severity === "WARNING",
   ).length;
@@ -899,7 +906,10 @@ async function main() {
       `ℹ️ schema-dts checked ${schemaDtsSummary.checkedNodes} node(s), found ${issueCount} issue(s).`,
     );
   }
-  if (Array.isArray(schemaDtsSummary.issues) && schemaDtsSummary.issues.length) {
+  if (
+    Array.isArray(schemaDtsSummary.issues) &&
+    schemaDtsSummary.issues.length
+  ) {
     const byFile = new Map(pageResults.map((page) => [page.file, page]));
     for (const issue of schemaDtsSummary.issues) {
       const page = byFile.get(issue.file);

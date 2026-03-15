@@ -259,7 +259,11 @@ function resolveCommandForSpawn(cmd) {
   return cmd;
 }
 
-function runCommandCapture(cmd, cmdArgs, { timeoutMs = TIMEOUT_MS, quiet = true } = {}) {
+function runCommandCapture(
+  cmd,
+  cmdArgs,
+  { timeoutMs = TIMEOUT_MS, quiet = true } = {},
+) {
   return new Promise((resolve) => {
     const child = spawn(resolveCommandForSpawn(cmd), cmdArgs, {
       shell: false,
@@ -309,7 +313,9 @@ function parseTestsslFindings(raw) {
   return raw
     .filter((entry) => entry && typeof entry === "object")
     .map((entry) => {
-      const severity = String(entry.severity || entry.level || "").toUpperCase();
+      const severity = String(
+        entry.severity || entry.level || "",
+      ).toUpperCase();
       const id = String(entry.id || entry.finding || entry.test || "finding");
       const finding = String(
         entry.finding || entry.issue || entry.details || entry.output || "",
@@ -330,7 +336,8 @@ async function runTestssl(baseUrl) {
     return {
       status: "skipped",
       findings: 0,
-      message: "testssl.sh disabled (enable with --with-testssl or SECURITY_USE_TESTSSL=1).",
+      message:
+        "testssl.sh disabled (enable with --with-testssl or SECURITY_USE_TESTSSL=1).",
       details: null,
     };
   }
@@ -782,7 +789,9 @@ async function main() {
     ["observatory", observatory],
     ["testssl", testssl],
   ]
-    .filter(([, result]) => result?.status === "failed" || result?.status === "error")
+    .filter(
+      ([, result]) => result?.status === "failed" || result?.status === "error",
+    )
     .map(([name]) => name);
   const failed = failedTools.length > 0;
 

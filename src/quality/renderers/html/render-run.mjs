@@ -110,7 +110,10 @@ function pageReportsTableHtml(checkId, check = {}) {
         : 0;
       const hasIssues = errors + warnings > 0;
       const status = hasIssues
-        ? statusPillHtml(`${errors + warnings} issue(s)`, errors > 0 ? "fail" : "warn")
+        ? statusPillHtml(
+            `${errors + warnings} issue(s)`,
+            errors > 0 ? "fail" : "warn",
+          )
         : statusPillHtml("No issue", "pass");
       const reportCell = hasIssues
         ? `<a class="check-link" href="./${escapeContent(checkId)}/pages/${escapeContent(page?.name || "")}">Open</a>`

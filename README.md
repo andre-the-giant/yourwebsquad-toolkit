@@ -331,6 +331,15 @@ Generated files:
 - `reports/security/stats.json`
 - `reports/security/testssl.json` (when testssl is enabled)
 
+## Link checks
+
+`yws-toolkit quality links` now runs two analyzers in the same check:
+
+- Internal link crawler/checker (existing logic)
+- Linkinator
+
+Both tool results are merged into the same Links report/data output.
+
 ## Release / versioning
 
 This repo uses git tags (`vX.Y.Z`) as consumable versions.

@@ -5,7 +5,9 @@ function toNumber(value) {
 
 export function summarizeLinksPayload(payload) {
   const stats = payload?.stats || {};
-  const broken = toNumber(stats.broken);
+  const internalBroken = toNumber(stats.broken);
+  const linkinatorBroken = toNumber(stats.linkinatorBroken);
+  const broken = toNumber(stats.brokenCombined) || internalBroken + linkinatorBroken;
   const failed = Boolean(payload?.failed) || broken > 0;
 
   if (!stats || Object.keys(stats).length === 0) {
@@ -16,7 +18,7 @@ export function summarizeLinksPayload(payload) {
   }
 
   const summary = broken
-    ? `Link check: ${broken} broken link(s)`
+    ? `Link check: ${broken} broken link(s) (internal: ${internalBroken}, linkinator: ${linkinatorBroken})`
     : "Link check: 0 broken links";
   return { summary, failed };
 }

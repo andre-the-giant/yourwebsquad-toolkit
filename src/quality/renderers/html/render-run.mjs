@@ -242,6 +242,16 @@ function linksDetailsHtml(check = {}) {
   const linksPayload =
     check?.links && typeof check.links === "object" ? check.links : {};
   const broken = Array.isArray(linksPayload.broken) ? linksPayload.broken : [];
+  const tools =
+    check?.stats?.tools && typeof check.stats.tools === "object"
+      ? check.stats.tools
+      : {};
+  const internalTool =
+    tools?.internal && typeof tools.internal === "object" ? tools.internal : {};
+  const linkinatorTool =
+    tools?.linkinator && typeof tools.linkinator === "object"
+      ? tools.linkinator
+      : {};
   const brokenRows = broken
     .slice(0, 80)
     .map(
@@ -253,17 +263,77 @@ function linksDetailsHtml(check = {}) {
       </tr>`,
     )
     .join("");
-  const pageReports = Array.isArray(check?.meta?.pageReports)
-    ? check.meta.pageReports
+  const toolRows = [
+    {
+      name: "internal",
+      status: Number(internalTool?.brokenCount || 0) > 0 ? "failed" : "passed",
+      findings: Number(internalTool?.brokenCount || 0),
+      notes:
+        Number(internalTool?.skippedExternal || 0) > 0
+          ? `skipped external: ${Number(internalTool.skippedExternal)}`
+          : "-",
+    },
+    {
+      name: "linkinator",
+      status: linkinatorTool?.status || "unknown",
+      findings: Number(linkinatorTool?.brokenCount || 0),
+      notes: linkinatorTool?.message || "-",
+    },
+  ]
+    .map(
+      (tool) => `<tr>
+        <td>${escapeContent(tool.name)}</td>
+        <td>${escapeContent(tool.status)}</td>
+        <td>${escapeContent(String(tool.findings))}</td>
+        <td>${escapeContent(tool.notes)}</td>
+      </tr>`,
+    )
+    .join("");
+  const linkinatorBroken = Array.isArray(linkinatorTool?.broken)
+    ? linkinatorTool.broken
     : [];
-  const pageReportLinks = pageReports.length
-    ? `<ul>${pageReports
-        .slice(0, 25)
-        .map(
-          (report) =>
-            `<li><a class="check-link" href="./links/pages/${escapeContent(report.name)}">${escapeContent(report.name)}</a></li>`,
-        )
-        .join("")}</ul>`
+  const linkinatorRows = linkinatorBroken
+    .slice(0, 120)
+    .map(
+      (entry) => `<tr>
+        <td>${escapeContent(entry?.parent || "-")}</td>
+        <td>${escapeContent(entry?.url || "-")}</td>
+        <td>${escapeContent(entry?.status || "-")}</td>
+      </tr>`,
+    )
+    .join("");
+  const pageSummaries = Array.isArray(check?.meta?.pageSummaries)
+    ? check.meta.pageSummaries
+    : [];
+  const pageReportTable = pageSummaries.length
+    ? `<div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Page</th><th>Errors</th><th>Report</th></tr>
+        </thead>
+        <tbody>${pageSummaries
+          .slice(0, 200)
+          .map((page) => {
+            const errors = Number.isFinite(Number(page?.errors))
+              ? Number(page.errors)
+              : 0;
+            const pill = statusPillHtml(
+              errors > 0 ? `${errors} error(s)` : "No issue",
+              errors > 0 ? "fail" : "pass",
+            );
+            const linkCell =
+              errors > 0
+                ? `<a class="check-link" href="./links/pages/${escapeContent(page?.name || "")}">Open</a>`
+                : `<span class="muted">-</span>`;
+            return `<tr>
+              <td>${escapeContent(page?.label || page?.name || "-")}</td>
+              <td>${pill}</td>
+              <td>${linkCell}</td>
+            </tr>`;
+          })
+          .join("")}</tbody>
+      </table>
+    </div>`
     : `<p class="muted">No Link-check page reports found.</p>`;
 
   const mainReportLink = check?.meta?.reportHtmlPath
@@ -278,6 +348,17 @@ function linksDetailsHtml(check = {}) {
     <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
+    <h2>Tool Findings</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Tool</th><th>Status</th><th>Findings</th><th>Notes</th></tr>
+        </thead>
+        <tbody>${toolRows}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="check-card spacer-top">
     <h2>Broken Links</h2>
     <div class="table-wrap">
       <table>
@@ -289,8 +370,19 @@ function linksDetailsHtml(check = {}) {
     </div>
   </section>
   <section class="check-card spacer-top">
+    <h2>Linkinator Broken Links</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Parent</th><th>Broken URL</th><th>Status</th></tr>
+        </thead>
+        <tbody>${linkinatorRows || '<tr><td colspan="3">No Linkinator broken links</td></tr>'}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="check-card spacer-top">
     <h2>Page Reports</h2>
-    ${pageReportLinks}
+    ${pageReportTable}
   </section>`;
 }
 
@@ -424,22 +516,45 @@ function vnuDetailsHtml(check = {}) {
     check?.stats && typeof check.stats === "object" ? check.stats : {};
   const statsRows = Object.entries(stats)
     .map(
-      ([key, value]) =>
-        `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`,
+      ([key, value]) => {
+        const numeric = Number(value);
+        if (["errorCount", "warningCount", "infoCount"].includes(key)) {
+          const count = Number.isFinite(numeric) ? numeric : 0;
+          const tone =
+            key === "errorCount"
+              ? count > 0
+                ? "fail"
+                : "pass"
+              : key === "warningCount"
+                ? count > 0
+                  ? "warn"
+                  : "pass"
+                : "info";
+          return `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${statusPillHtml(String(count), tone)}</td></tr>`;
+        }
+        return `<tr><th>${escapeContent(formatStatLabel(key))}</th><td>${escapeContent(formatStatValue(value))}</td></tr>`;
+      },
     )
     .join("");
   const issues = Array.isArray(check?.issues) ? check.issues : [];
   const issueRows = issues
     .slice(0, 80)
-    .map(
-      (issue) => `<tr>
-        <td>${escapeContent(issue?.severity || "-")}</td>
+    .map((issue) => {
+      const severity = String(issue?.severity || "-").toLowerCase();
+      const tone =
+        severity === "error"
+          ? "fail"
+          : severity === "warning"
+            ? "warn"
+            : "info";
+      return `<tr>
+        <td>${statusPillHtml(severity === "-" ? "-" : severity, tone)}</td>
         <td>${escapeContent(issue?.url || "-")}</td>
         <td>${escapeContent(issue?.line ?? "-")}</td>
         <td>${escapeContent(issue?.column ?? "-")}</td>
         <td>${escapeContent(issue?.message || "-")}</td>
-      </tr>`,
-    )
+      </tr>`;
+    })
     .join("");
 
   const mainReportLink = check?.meta?.reportHtmlPath
@@ -491,7 +606,7 @@ function encodeHrefPath(pathValue) {
     .join("/");
 }
 
-function lighthouseOverviewTableHtml(check = {}) {
+function lighthouseOverviewTableHtml(check = {}, runBasePath = "") {
   const metrics = Array.isArray(check?.metrics) ? check.metrics : [];
   const htmlReports = Array.isArray(check?.meta?.htmlReports)
     ? check.meta.htmlReports
@@ -511,12 +626,20 @@ function lighthouseOverviewTableHtml(check = {}) {
       const accessibility = formatLighthouseScore(item?.scores?.accessibility);
       const bestPractices = formatLighthouseScore(item?.scores?.bestPractices);
       const seo = formatLighthouseScore(item?.scores?.seo);
-      const reportName = item?.htmlReport || htmlReports[index]?.name || null;
-      const report = reportName ? reportByName.get(reportName) : null;
-      const link = reportName
+      const preferredName = item?.htmlReport || null;
+      const reportName = preferredName || htmlReports[index]?.name || null;
+      const resolvedName = reportName
+        ? reportByName.has(reportName)
+          ? reportName
+          : reportByName.has(`${reportName}.html`)
+            ? `${reportName}.html`
+            : htmlReports[index]?.name || null
+        : null;
+      const report = resolvedName ? reportByName.get(resolvedName) : null;
+      const link = resolvedName
         ? report
-          ? `<a class="check-link" href="../lighthouse/reports/${encodeHrefPath(report.name)}">Open</a>`
-          : `<span class="muted">${escapeContent(reportName)}</span>`
+          ? `<a class="check-link" href="${escapeContent(runBasePath)}/lighthouse/reports/${encodeHrefPath(report.name)}">Open</a>`
+          : `<span class="muted">${escapeContent(resolvedName)}</span>`
         : `<span class="muted">-</span>`;
       return `<tr>
         <td>${escapeContent(url)}</td>
@@ -789,7 +912,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
       </section>
       <section class="check-card spacer-top">
         <h2>Per-page Metrics</h2>
-        ${lighthouseOverviewTableHtml(checks.lighthouse)}
+        ${lighthouseOverviewTableHtml(checks.lighthouse, runBasePath)}
       </section>`,
     });
     writeText(path.join(outDir, "lighthouse", "index.html"), lighthousePage);

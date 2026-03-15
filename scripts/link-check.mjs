@@ -102,6 +102,113 @@ function runCommand(cmd, args, { label = cmd } = {}) {
   });
 }
 
+function runCommandCapture(cmd, args, { quiet = true } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(resolveCommandForSpawn(cmd), args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: false,
+      env: process.env,
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+      if (!quiet) process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      if (!quiet) process.stderr.write(chunk);
+    });
+    child.on("error", (error) => {
+      resolve({
+        code: 1,
+        stdout,
+        stderr,
+        error: String(error?.message || error),
+      });
+    });
+    child.on("exit", (code) => {
+      resolve({
+        code: code ?? 1,
+        stdout,
+        stderr,
+        error: null,
+      });
+    });
+  });
+}
+
+function parseJsonLoose(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(text.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+async function runLinkinator(baseUrl) {
+  const args = [
+    "--yes",
+    "linkinator",
+    baseUrl,
+    "--recurse",
+    "--format",
+    "json",
+    "--verbosity",
+    QUIET_MODE ? "error" : "warning",
+  ];
+  const result = await runCommandCapture("npx", args, { quiet: QUIET_MODE });
+  if (result.error) {
+    return {
+      status: "error",
+      passed: false,
+      brokenCount: 0,
+      rawCount: 0,
+      broken: [],
+      message: `Linkinator launch failed: ${result.error}`,
+    };
+  }
+  const payload = parseJsonLoose(result.stdout || result.stderr) || {};
+  const links = Array.isArray(payload?.links) ? payload.links : [];
+  const broken = links
+    .filter((entry) => String(entry?.state || "").toUpperCase() === "BROKEN")
+    .map((entry) => ({
+      url: entry?.url || null,
+      parent: entry?.parent || null,
+      status: Number(entry?.status || 0) || 0,
+      state: entry?.state || "BROKEN",
+    }));
+  return {
+    status:
+      result.code === 0
+        ? "passed"
+        : broken.length > 0
+          ? "failed"
+          : "error",
+    passed: Boolean(payload?.passed),
+    brokenCount: broken.length,
+    rawCount: links.length,
+    broken,
+    message:
+      broken.length > 0
+        ? `Linkinator found ${broken.length} broken link(s).`
+        : result.code === 0
+          ? "Linkinator found no broken links."
+          : `Linkinator exited with code ${result.code}.`,
+  };
+}
+
 function startStaticServer(dir, port, { quiet = QUIET_MODE } = {}) {
   const args = [
     "serve",
@@ -943,6 +1050,9 @@ async function main() {
         })),
     );
 
+    const linkinator = await runLinkinator(BASE_URL);
+    const combinedBrokenCount = broken.length + Number(linkinator.brokenCount || 0);
+
     ensureDir(REPORT_DIR);
 
     const summaryPath = writeMarkdown(
@@ -971,7 +1081,23 @@ async function main() {
     const jsonPath = path.join(REPORT_DIR, "links.json");
     fs.writeFileSync(
       jsonPath,
-      JSON.stringify({ pages: pageResults, broken, skippedExternal }, null, 2),
+      JSON.stringify(
+        {
+          pages: pageResults,
+          broken,
+          skippedExternal,
+          tools: {
+            internal: {
+              brokenCount: broken.length,
+              skippedExternal,
+            },
+            linkinator,
+          },
+          brokenCombinedCount: combinedBrokenCount,
+        },
+        null,
+        2,
+      ),
       "utf8",
     );
 
@@ -996,10 +1122,10 @@ async function main() {
       console.log(`📄 Link data (json): ${jsonPath}`);
     }
 
-    if (broken.length > 0) {
+    if (combinedBrokenCount > 0) {
       if (!QUIET_MODE) {
         console.error(
-          `\n🚫 Link check failed: ${broken.length} broken links found.`,
+          `\n🚫 Link check failed: ${combinedBrokenCount} broken links found (internal: ${broken.length}, linkinator: ${linkinator.brokenCount || 0}).`,
         );
       }
       process.exitCode = 1;

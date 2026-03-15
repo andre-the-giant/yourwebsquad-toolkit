@@ -12,9 +12,13 @@ function brokenCount(links) {
 
 export function normalizeLinksPayload(raw, options = {}) {
   const links = raw?.links || null;
+  const tools = links?.tools && typeof links.tools === "object" ? links.tools : {};
   const broken = brokenCount(links);
+  const linkinatorBroken = toNumber(tools?.linkinator?.brokenCount);
+  const combinedBroken =
+    toNumber(links?.brokenCombinedCount) || broken + linkinatorBroken;
   const skippedExternal = toNumber(links?.skippedExternal);
-  const inferredFailed = broken > 0;
+  const inferredFailed = combinedBroken > 0;
 
   return {
     selected: options.selected !== false,
@@ -22,7 +26,10 @@ export function normalizeLinksPayload(raw, options = {}) {
     links,
     stats: {
       broken,
+      linkinatorBroken,
+      brokenCombined: combinedBroken,
       skippedExternal,
+      tools,
     },
     meta: {
       logPath: raw?.logPath || null,
@@ -30,6 +37,7 @@ export function normalizeLinksPayload(raw, options = {}) {
       reportHtmlPath: raw?.reportHtmlPath || null,
       summaryMdPath: raw?.summaryMdPath || null,
       pageReports: Array.isArray(raw?.pageReports) ? raw.pageReports : [],
+      pageSummaries: Array.isArray(raw?.pageSummaries) ? raw.pageSummaries : [],
     },
   };
 }

@@ -119,9 +119,12 @@ export function buildCanonicalDataset({
     });
   }
   if (selectedChecks?.sitespeed) {
-    const raw = collectSitespeedFromReportDir(path.join(reportRoot, "sitespeed"), {
-      logPath: path.join(logRoot, "sitespeed.log"),
-    });
+    const raw = collectSitespeedFromReportDir(
+      path.join(reportRoot, "sitespeed"),
+      {
+        logPath: path.join(logRoot, "sitespeed.log"),
+      },
+    );
     checks.sitespeed = normalizeSitespeedPayload(raw, {
       selected: true,
       failed: failed.sitespeed,

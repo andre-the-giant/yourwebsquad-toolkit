@@ -347,8 +347,7 @@ async function runTestssl(baseUrl) {
     return {
       status: "skipped",
       findings: 0,
-      message:
-        "testssl.sh disabled (--no-testssl or SECURITY_USE_TESTSSL=0).",
+      message: "testssl.sh disabled (--no-testssl or SECURITY_USE_TESTSSL=0).",
       details: null,
     };
   }

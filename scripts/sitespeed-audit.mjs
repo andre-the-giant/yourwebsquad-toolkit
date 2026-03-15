@@ -147,7 +147,9 @@ async function main() {
   const baseUrl = preferIpv4Loopback(args.base || DEFAULT_BASE_URL);
   const reportDir = path.resolve(args.reportDir || DEFAULT_REPORT_DIR);
   const quiet = Boolean(args.quiet);
-  const urls = args.urlsFile ? loadUrlsFromFile(args.urlsFile, baseUrl) : [baseUrl];
+  const urls = args.urlsFile
+    ? loadUrlsFromFile(args.urlsFile, baseUrl)
+    : [baseUrl];
   if (!urls.length) {
     console.error("No URLs provided for Sitespeed.io.");
     process.exit(1);
@@ -173,7 +175,9 @@ async function main() {
     errorMessage:
       run.error ||
       (run.code !== 0
-        ? String(run.stderr || run.stdout || "sitespeed failed").trim().slice(0, 500)
+        ? String(run.stderr || run.stdout || "sitespeed failed")
+            .trim()
+            .slice(0, 500)
         : null),
   };
 

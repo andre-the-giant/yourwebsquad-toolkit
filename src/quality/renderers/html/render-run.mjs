@@ -112,13 +112,36 @@ function statusPillHtml(label, tone = "info") {
 }
 
 function toneForStat(key, numeric) {
-  if (["errorCount", "assertionFailures", "runFailures", "broken", "findingsTotal"].includes(key)) {
+  if (
+    [
+      "errorCount",
+      "assertionFailures",
+      "runFailures",
+      "broken",
+      "findingsTotal",
+    ].includes(key)
+  ) {
     return numeric > 0 ? "fail" : "pass";
   }
   if (["warningCount", "schemaDtsWarningCount"].includes(key)) {
     return numeric > 0 ? "warn" : "pass";
   }
-  if (["infoCount", "urlsTested", "pagesTested", "reportsGenerated", "messagesTotal", "pagesWithIssues", "skippedExternal", "schemaDtsCheckedNodes", "schemaDtsIssueCount", "schemaDtsErrorCount", "linkinatorBroken", "brokenCombined"].includes(key)) {
+  if (
+    [
+      "infoCount",
+      "urlsTested",
+      "pagesTested",
+      "reportsGenerated",
+      "messagesTotal",
+      "pagesWithIssues",
+      "skippedExternal",
+      "schemaDtsCheckedNodes",
+      "schemaDtsIssueCount",
+      "schemaDtsErrorCount",
+      "linkinatorBroken",
+      "brokenCombined",
+    ].includes(key)
+  ) {
     return "info";
   }
   return "info";
@@ -131,7 +154,9 @@ function overviewPillsHtml(stats = {}, { excludeKeys = [] } = {}) {
     .map(([key, value]) => {
       if (value && typeof value === "object") return null;
       const numeric = Number(value);
-      const tone = Number.isFinite(numeric) ? toneForStat(key, numeric) : "info";
+      const tone = Number.isFinite(numeric)
+        ? toneForStat(key, numeric)
+        : "info";
       const label = `${formatStatLabel(key)}: ${formatStatValue(value)}`;
       return statusPillHtml(label, tone);
     })
@@ -888,9 +913,9 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
                   ? securityDetailsHtml(check)
                   : checkId === "sitespeed"
                     ? sitespeedDetailsHtml(check)
-                  : checkId === "vnu"
-                    ? vnuDetailsHtml(check)
-                  : checkDetailsHtml(checkId, check),
+                    : checkId === "vnu"
+                      ? vnuDetailsHtml(check)
+                      : checkDetailsHtml(checkId, check),
     });
     writeText(path.join(outDir, `${checkId}.html`), page);
   }

@@ -38,7 +38,7 @@ body {
 }
 
 .report-nav {
-  margin-top: 10px;
+  margin: 10px 0 18px;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
@@ -57,7 +57,7 @@ body {
 }
 
 .check-grid {
-  margin-top: 18px;
+  margin-top: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
@@ -74,17 +74,13 @@ body {
   margin: 0 0 8px;
 }
 
-.check-card ul {
-  margin: 0;
-  padding-left: 18px;
-}
-
 .status-chip {
   display: inline-block;
   border-radius: 999px;
   padding: 3px 10px;
   border: 1px solid var(--line);
-  font-weight: 700;
+  font-size: 0.8rem;
+  font-weight: 400;
   letter-spacing: 0.01em;
   background: color-mix(in srgb, var(--bg-elev-2) 82%, transparent);
 }
@@ -110,14 +106,22 @@ body {
   background: color-mix(in srgb, var(--info) 12%, var(--bg-elev-2));
 }
 
-.check-link {
-  color: var(--accent);
+.report-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev-2));
+  color: var(--text);
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 12px;
 }
 
-.check-link:hover {
-  text-decoration: underline;
+.report-link-btn:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-elev-2));
 }
 
 table {
@@ -130,6 +134,12 @@ td {
   border: 1px solid var(--line);
   padding: 8px;
   text-align: left;
+}
+
+th {
+  background: #1a345f;
+  color: #eef4ff;
+  font-weight: 700;
 }
 
 .table-wrap {

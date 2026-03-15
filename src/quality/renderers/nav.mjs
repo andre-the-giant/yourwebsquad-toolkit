@@ -5,9 +5,10 @@ function joinBase(basePath, targetPath) {
   return `${root}/${target}`;
 }
 
-export function reportNavLinks({ basePath = "" } = {}) {
-  return [
-    { key: "home", label: "Home", href: joinBase(basePath, "index.html") },
+export function reportNavLinks({ basePath = "", selectedChecks = [] } = {}) {
+  const selected = new Set(selectedChecks);
+  const nav = [{ key: "home", label: "Home", href: joinBase(basePath, "index.html") }];
+  const checkLinks = [
     {
       key: "lighthouse",
       label: "Lighthouse",
@@ -37,4 +38,8 @@ export function reportNavLinks({ basePath = "" } = {}) {
     },
     { key: "vnu", label: "Nu HTML", href: joinBase(basePath, "vnu.html") },
   ];
+  if (!selected.size) {
+    return nav.concat(checkLinks);
+  }
+  return nav.concat(checkLinks.filter((item) => selected.has(item.key)));
 }

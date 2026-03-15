@@ -37,50 +37,15 @@ function statusForCheck(checkId, check = {}) {
   return { label: "Healthy", tone: "pass" };
 }
 
-function friendlyStats(checkId, check = {}) {
-  const stats =
-    check?.stats && typeof check.stats === "object" ? check.stats : {};
-  const labels = {
-    urlsTested: "URLs tested",
-    reportsGenerated: "Reports generated",
-    assertionFailures: "Assertions failed",
-    runFailures: "Run failures",
-    errorCount: "Errors",
-    warningCount: "Warnings",
-    pagesTested: "Pages tested",
-    findingsTotal: "Findings",
-    broken: "Broken links",
-    skippedExternal: "External links skipped",
-    messagesTotal: "Messages",
-    pagesWithIssues: "Pages with issues",
-    failures: "Failures",
-  };
-  const formatValue = (value) => {
-    if (Array.isArray(value)) return `${value.length}`;
-    if (value && typeof value === "object")
-      return `${Object.keys(value).length}`;
-    return `${value ?? "-"}`;
-  };
-  return Object.entries(stats)
-    .slice(0, 4)
-    .map(
-      ([key, value]) =>
-        `<li><strong>${escapeContent(labels[key] || key)}:</strong> ${escapeContent(formatValue(value))}</li>`,
-    )
-    .join("");
-}
-
 export function renderCheckCard(checkId, check = {}, options = {}) {
   const label = check?.label || friendlyCheckName(checkId);
   const status = statusForCheck(checkId, check);
-  const statRows = friendlyStats(checkId, check);
   const href = options.href || `./${checkId}.html`;
 
   return `<section class="check-card">
     <h2>${escapeContent(label)}</h2>
     <p><span class="status-chip ${escapeContent(status.tone)}">${escapeContent(status.label)}</span></p>
-    <ul>${statRows || "<li>No stats available</li>"}</ul>
-    <p><a class="check-link" href="${escapeContent(href)}">Open details</a></p>
+    <p><a class="report-link-btn" href="${escapeContent(href)}">Open details</a></p>
   </section>`;
 }
 
@@ -91,6 +56,6 @@ export function renderUnknownCheckFallback(checkId, check = {}, options = {}) {
     <h2>${escapeContent(checkId)}</h2>
     <p><span class="status-chip ${check.failed ? "fail" : "info"}">${escapeContent(status)}</span></p>
     <p>No dedicated template yet for this check.</p>
-    <p><a class="check-link" href="${escapeContent(href)}">Open details</a></p>
+    <p><a class="report-link-btn" href="${escapeContent(href)}">Open details</a></p>
   </section>`;
 }

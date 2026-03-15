@@ -55,8 +55,8 @@ function copyDirectoryIfExists(sourcePath, destinationPath) {
   return true;
 }
 
-function navHtml(runBasePath) {
-  const links = reportNavLinks({ basePath: runBasePath })
+function navHtml(runBasePath, selectedChecks = []) {
+  const links = reportNavLinks({ basePath: runBasePath, selectedChecks })
     .map(
       (link) =>
         `<a href="${escapeContent(link.href)}">${escapeContent(link.label)}</a>`,
@@ -190,6 +190,7 @@ function pageReportsTableHtml(checkId, check = {}) {
     return `<p class="muted">No page-level reports found.</p>`;
   }
 
+  const alwaysShowReportLink = checkId === "jsonld";
   const rows = summaries
     .slice(0, 200)
     .map((page) => {
@@ -206,8 +207,9 @@ function pageReportsTableHtml(checkId, check = {}) {
             errors > 0 ? "fail" : "warn",
           )
         : statusPillHtml("No issue", "pass");
-      const reportCell = hasIssues
-        ? `<a class="check-link" href="./${escapeContent(checkId)}/pages/${escapeContent(page?.name || "")}">Open</a>`
+      const canOpenReport = Boolean(page?.name) && (hasIssues || alwaysShowReportLink);
+      const reportCell = canOpenReport
+        ? `<a class="report-link-btn" href="./${escapeContent(checkId)}/pages/${escapeContent(page?.name || "")}">Open</a>`
         : `<span class="muted">-</span>`;
       return `<tr>
         <td>${escapeContent(page?.label || page?.name || "-")}</td>
@@ -249,14 +251,10 @@ function checkDetailsHtml(checkId, check = {}) {
 function pa11yDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
-  const mainReportLink = check?.meta?.reportHtmlPath
-    ? `<a class="check-link" href="./pa11y/report.html">Open Pa11y report.html</a>`
-    : `<span class="muted">No Pa11y report.html found</span>`;
 
   return `<section class="check-card">
     <h2>Pa11y Overview</h2>
     ${overviewPillsHtml(stats)}
-    <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
     <h2>Page Reports</h2>
@@ -279,14 +277,9 @@ function seoDetailsHtml(check = {}) {
       </tr>`,
     )
     .join("");
-  const mainReportLink = check?.meta?.reportHtmlPath
-    ? `<a class="check-link" href="./seo/report.html">Open SEO report.html</a>`
-    : `<span class="muted">No SEO report.html found</span>`;
-
   return `<section class="check-card">
     <h2>SEO Overview</h2>
     ${overviewPillsHtml(stats)}
-    <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
     <h2>Top Issues</h2>
@@ -392,7 +385,7 @@ function linksDetailsHtml(check = {}) {
             );
             const linkCell =
               errors > 0
-                ? `<a class="check-link" href="./links/pages/${escapeContent(page?.name || "")}">Open</a>`
+                ? `<a class="report-link-btn" href="./links/pages/${escapeContent(page?.name || "")}">Open</a>`
                 : `<span class="muted">-</span>`;
             return `<tr>
               <td>${escapeContent(page?.label || page?.name || "-")}</td>
@@ -405,14 +398,9 @@ function linksDetailsHtml(check = {}) {
     </div>`
     : `<p class="muted">No Link-check page reports found.</p>`;
 
-  const mainReportLink = check?.meta?.reportHtmlPath
-    ? `<a class="check-link" href="./links/report.html">Open Link-check report.html</a>`
-    : `<span class="muted">No Link-check report.html found</span>`;
-
   return `<section class="check-card">
     <h2>Link Check Overview</h2>
     ${overviewPillsHtml(stats, { excludeKeys: ["tools"] })}
-    <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
     <h2>Tool Findings</h2>
@@ -470,14 +458,9 @@ function jsonldDetailsHtml(check = {}) {
       </tr>`,
     )
     .join("");
-  const mainReportLink = check?.meta?.reportHtmlPath
-    ? `<a class="check-link" href="./jsonld/report.html">Open JSON-LD report.html</a>`
-    : `<span class="muted">No JSON-LD report.html found</span>`;
-
   return `<section class="check-card">
     <h2>JSON-LD Overview</h2>
     ${overviewPillsHtml(stats)}
-    <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
     <h2>Top Issues</h2>
@@ -529,7 +512,7 @@ function securityDetailsHtml(check = {}) {
     .join("");
 
   const mainReportLink = check?.meta?.reportHtmlPath
-    ? `<a class="check-link" href="./security/report.html">Open Security report.html</a>`
+    ? `<a class="report-link-btn" href="./security/report.html">Open Security report.html</a>`
     : `<span class="muted">No Security report.html found</span>`;
 
   return `<section class="check-card">
@@ -565,7 +548,7 @@ function sitespeedDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
   const reportLink = check?.meta?.indexHtmlPath
-    ? `<a class="check-link" href="./sitespeed/source/index.html">Open Sitespeed.io report</a>`
+    ? `<a class="report-link-btn" href="./sitespeed/source/">Open Sitespeed.io report</a>`
     : `<span class="muted">No Sitespeed.io report index found</span>`;
 
   return `<section class="check-card">
@@ -599,14 +582,9 @@ function vnuDetailsHtml(check = {}) {
     })
     .join("");
 
-  const mainReportLink = check?.meta?.reportHtmlPath
-    ? `<a class="check-link" href="./vnu/report.html">Open Nu HTML report.html</a>`
-    : `<span class="muted">No Nu HTML report.html found</span>`;
-
   return `<section class="check-card">
     <h2>Nu HTML Checker Overview</h2>
     ${overviewPillsHtml(stats)}
-    <p class="spacer-top">${mainReportLink}</p>
   </section>
   <section class="check-card spacer-top">
     <h2>Validation Issues</h2>
@@ -678,7 +656,7 @@ function lighthouseOverviewTableHtml(check = {}, runBasePath = "") {
       const report = resolvedName ? reportByName.get(resolvedName) : null;
       const link = resolvedName
         ? report
-          ? `<a class="check-link" href="${escapeContent(runBasePath)}/lighthouse/reports/${encodeHrefPath(report.name)}">Open</a>`
+          ? `<a class="report-link-btn" href="${escapeContent(runBasePath)}/lighthouse/reports/${encodeHrefPath(report.name)}">Open</a>`
           : `<span class="muted">${escapeContent(resolvedName)}</span>`
         : `<span class="muted">-</span>`;
       return `<tr>
@@ -768,6 +746,9 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
 
   const checks =
     dataset?.checks && typeof dataset.checks === "object" ? dataset.checks : {};
+  const selectedCheckIds = Array.isArray(dataset?.selectedChecks)
+    ? dataset.selectedChecks
+    : Object.keys(checks);
   const cards = Object.entries(checks)
     .map(([checkId, check]) =>
       KNOWN_CHECKS.has(checkId)
@@ -791,7 +772,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
   const indexHtml = renderLayout({
     title: "Quality Report",
     subtitle,
-    navHtml: navHtml(runBasePath),
+    navHtml: navHtml(runBasePath, selectedCheckIds),
     bodyHtml: body,
     stylesheetHref,
   });
@@ -898,7 +879,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
     const page = renderLayout({
       title: `Check: ${checkId}`,
       subtitle,
-      navHtml: navHtml(runBasePath),
+      navHtml: navHtml(runBasePath, selectedCheckIds),
       stylesheetHref,
       bodyHtml:
         checkId === "pa11y"
@@ -941,7 +922,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
     const lighthousePage = renderLayout({
       title: "Check: Lighthouse",
       subtitle,
-      navHtml: navHtml(runBasePath),
+      navHtml: navHtml(runBasePath, selectedCheckIds),
       stylesheetHref,
       bodyHtml: `<section class="check-card">
         <h2>Lighthouse</h2>

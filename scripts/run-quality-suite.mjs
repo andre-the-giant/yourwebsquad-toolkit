@@ -139,21 +139,6 @@ function openInBrowser(url) {
   }
 }
 
-const TEST_CHOICES = [
-  {
-    name: "All (Lighthouse + Pa11y + SEO + Link check + JSON-LD + Security + Sitespeed + Nu HTML)",
-    value: "all",
-  },
-  { name: "Lighthouse", value: "lighthouse" },
-  { name: "Pa11y", value: "pa11y" },
-  { name: "SEO audit", value: "seo" },
-  { name: "Link check", value: "links" },
-  { name: "JSON-LD validation", value: "jsonld" },
-  { name: "Security audit", value: "security" },
-  { name: "Sitespeed.io", value: "sitespeed" },
-  { name: "Nu HTML Checker (vnu)", value: "vnu" },
-];
-
 const CHECK_KEYS = [
   "lighthouse",
   "pa11y",
@@ -175,31 +160,23 @@ const CHECK_NAME_BY_ID = {
   vnu: "Nu HTML Checker (vnu)",
 };
 
-function choiceToFlags(choice) {
-  if (choice === "all") {
-    return {
-      label: "All checks",
-      lighthouse: true,
-      pa11y: true,
-      seo: true,
-      links: true,
-      jsonld: true,
-      security: true,
-      sitespeed: true,
-      vnu: true,
-    };
-  }
-  const name = TEST_CHOICES.find((c) => c.value === choice)?.name || choice;
+function checksToFlags(selectedValues = []) {
+  const selectedSet = new Set(
+    Array.isArray(selectedValues) ? selectedValues : [],
+  );
+  const enabledNames = CHECK_KEYS.filter((key) => selectedSet.has(key)).map(
+    (key) => checkDisplayName(key),
+  );
   return {
-    label: name,
-    lighthouse: choice === "lighthouse",
-    pa11y: choice === "pa11y",
-    seo: choice === "seo",
-    links: choice === "links",
-    jsonld: choice === "jsonld",
-    security: choice === "security",
-    sitespeed: choice === "sitespeed",
-    vnu: choice === "vnu",
+    label: enabledNames.length ? enabledNames.join(", ") : "none",
+    lighthouse: selectedSet.has("lighthouse"),
+    pa11y: selectedSet.has("pa11y"),
+    seo: selectedSet.has("seo"),
+    links: selectedSet.has("links"),
+    jsonld: selectedSet.has("jsonld"),
+    security: selectedSet.has("security"),
+    sitespeed: selectedSet.has("sitespeed"),
+    vnu: selectedSet.has("vnu"),
   };
 }
 
@@ -238,32 +215,36 @@ function applyAvailabilityToFlags(flags, availability) {
 
 async function promptForChecks(selectedTarget) {
   const availability = buildCheckAvailability(selectedTarget);
-  const choices = TEST_CHOICES.map((choice) => {
-    if (choice.value === "all") return choice;
-    const rule = availability?.[choice.value];
+  const choices = CHECK_KEYS.map((checkId) => {
+    const rule = availability?.[checkId];
     if (rule?.enabled === false) {
-      return { ...choice, disabled: rule.reason || "Not available" };
+      return {
+        name: checkDisplayName(checkId),
+        value: checkId,
+        disabled: rule.reason || "Not available",
+      };
     }
-    return choice;
+    return { name: checkDisplayName(checkId), value: checkId };
   });
+  const defaultValues = choices
+    .filter((choice) => !choice.disabled)
+    .map((choice) => choice.value);
 
-  const { choice } = await inquirer.prompt([
+  const { selected } = await inquirer.prompt([
     {
-      type: "list",
-      name: "choice",
-      message: "Which test do you want to perform?",
+      type: "checkbox",
+      name: "selected",
+      message: "Select tests to perform (use arrows + space):",
       choices,
-      default: "all",
+      default: defaultValues,
+      loop: false,
+      validate: (value) =>
+        Array.isArray(value) && value.length > 0
+          ? true
+          : "Select at least one test.",
     },
   ]);
-  const selected = applyAvailabilityToFlags(
-    choiceToFlags(choice),
-    availability,
-  );
-  if (choice === "all") {
-    selected.label = "All available checks";
-  }
-  return selected;
+  return applyAvailabilityToFlags(checksToFlags(selected), availability);
 }
 
 function unquoteEnvValue(value) {
@@ -1089,8 +1070,7 @@ async function main() {
   const unavailableChecks = Object.entries(availability)
     .filter(([, rule]) => rule?.enabled === false)
     .map(([key, rule]) => {
-      const name =
-        TEST_CHOICES.find((choice) => choice.value === key)?.name || key;
+      const name = checkDisplayName(key);
       return `${name}${rule?.reason ? ` (${rule.reason})` : ""}`;
     });
   if (unavailableChecks.length) {

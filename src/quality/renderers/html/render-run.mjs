@@ -35,8 +35,8 @@ function copyFileIfExists(sourcePath, destinationPath) {
   return true;
 }
 
-function navHtml() {
-  const links = reportNavLinks()
+function navHtml(runBasePath) {
+  const links = reportNavLinks({ basePath: runBasePath })
     .map(
       (link) =>
         `<a href="${escapeContent(link.href)}">${escapeContent(link.label)}</a>`,
@@ -583,6 +583,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
   if (!runId) throw new Error("renderHtmlRun requires runId.");
   const reportRoot = path.join(cwd, "reports");
   const outDir = path.join(reportRoot, "views", "html", runId);
+  const runBasePath = `/views/html/${encodeURIComponent(runId)}`;
   ensureDir(outDir);
 
   const checks =
@@ -610,7 +611,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
   const indexHtml = renderLayout({
     title: "Quality Report",
     subtitle,
-    navHtml: navHtml(),
+    navHtml: navHtml(runBasePath),
     bodyHtml: body,
   });
   writeText(path.join(outDir, "index.html"), indexHtml);
@@ -708,7 +709,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
     const page = renderLayout({
       title: `Check: ${checkId}`,
       subtitle,
-      navHtml: navHtml(),
+      navHtml: navHtml(runBasePath),
       bodyHtml:
         checkId === "pa11y"
           ? pa11yDetailsHtml(check)
@@ -754,7 +755,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
     const lighthousePage = renderLayout({
       title: "Check: Lighthouse",
       subtitle,
-      navHtml: navHtml(),
+      navHtml: navHtml(runBasePath),
       bodyHtml: `<section class="check-card">
         <h2>Lighthouse</h2>
         <p class="muted">Overview</p>

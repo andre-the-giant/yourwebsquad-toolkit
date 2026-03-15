@@ -28,6 +28,11 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
+    if ((arg === "--source-dir" || arg === "-s") && argv[i + 1]) {
+      opts.sourceDir = argv[i + 1];
+      i += 1;
+      continue;
+    }
     if (arg === "--quiet") {
       opts.quiet = true;
     }
@@ -124,6 +129,46 @@ function uniqueCount(items) {
   return new Set(items.filter(Boolean)).size;
 }
 
+function collectHtmlFiles(dirPath) {
+  if (!dirPath || !fs.existsSync(dirPath)) return [];
+  const out = [];
+  const walk = (current) => {
+    for (const name of fs.readdirSync(current)) {
+      const fullPath = path.join(current, name);
+      const stat = fs.statSync(fullPath);
+      if (stat.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!name.endsWith(".html")) continue;
+      out.push(fullPath);
+    }
+  };
+  walk(dirPath);
+  return out;
+}
+
+function toReportUrl(rawUrl, { baseUrl, sourceDir }) {
+  const value = String(rawUrl || "");
+  if (!value.startsWith("file:")) return value || null;
+  if (!sourceDir) return value;
+  try {
+    const filePath = decodeURIComponent(new URL(value).pathname);
+    const relativePath = path.relative(sourceDir, filePath);
+    if (relativePath.startsWith("..")) return value;
+    const root = `${baseUrl.replace(/\/+$/, "")}/`;
+    if (relativePath.endsWith("/index.html")) {
+      return new URL(relativePath.slice(0, -"index.html".length), root).toString();
+    }
+    if (relativePath.endsWith(".html")) {
+      return new URL(relativePath.slice(0, -".html".length), root).toString();
+    }
+    return new URL(relativePath, root).toString();
+  } catch {
+    return value;
+  }
+}
+
 function buildReportHtml({ stats, issues, baseUrl }) {
   const rows = issues
     .slice(0, 400)
@@ -187,17 +232,22 @@ async function main() {
   const baseUrl = preferIpv4Loopback(args.base || DEFAULT_BASE_URL);
   const reportDir = args.reportDir || DEFAULT_REPORT_DIR;
   const quiet = Boolean(args.quiet);
-  const urls = args.urlsFile
-    ? loadUrlsFromFile(args.urlsFile, baseUrl)
-    : [baseUrl];
+  const sourceDir = args.sourceDir ? path.resolve(args.sourceDir) : null;
+  const urls = sourceDir
+    ? []
+    : args.urlsFile
+      ? loadUrlsFromFile(args.urlsFile, baseUrl)
+      : [baseUrl];
+  const htmlFiles = sourceDir ? collectHtmlFiles(sourceDir) : [];
 
-  if (!urls.length) {
-    console.error("No URLs provided for Nu HTML Checker.");
+  if (!urls.length && !htmlFiles.length) {
+    console.error("No URLs or source files provided for Nu HTML Checker.");
     process.exit(1);
   }
 
   ensureCleanDir(reportDir);
 
+  const targets = sourceDir ? [sourceDir] : urls;
   const cmdArgs = [
     "--yes",
     "vnu-jar",
@@ -205,7 +255,8 @@ async function main() {
     "json",
     "--stdout",
     "--exit-zero-always",
-    ...urls,
+    ...(sourceDir ? ["--skip-non-html"] : []),
+    ...targets,
   ];
   const run = await runCommand("npx", cmdArgs, { quiet });
   const payload = parseVnuJson(run.stdout || run.stderr);
@@ -214,7 +265,7 @@ async function main() {
     severity: normalizeSeverity(message),
     type: message?.type || null,
     subType: message?.subType || null,
-    url: message?.url || null,
+    url: toReportUrl(message?.url || null, { baseUrl, sourceDir }),
     line: Number.isFinite(message?.lastLine) ? Number(message.lastLine) : null,
     column: Number.isFinite(message?.lastColumn)
       ? Number(message.lastColumn)
@@ -232,7 +283,7 @@ async function main() {
   const pagesWithIssues = uniqueCount(issues.map((issue) => issue.url));
 
   const stats = {
-    urlsTested: urls.length,
+    urlsTested: sourceDir ? htmlFiles.length : urls.length,
     pagesWithIssues,
     messagesTotal: issues.length,
     errorCount,

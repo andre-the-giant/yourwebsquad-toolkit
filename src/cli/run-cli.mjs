@@ -27,6 +27,7 @@ const COMMANDS = {
     "list-runs": "scripts/quality-list-runs.mjs",
     "delete-run": "scripts/quality-delete-run.mjs",
     "clean-runs": "scripts/quality-clean-runs.mjs",
+    "flush-runs": "scripts/quality-flush-runs.mjs",
     "prune-runs": "scripts/quality-prune-runs.mjs",
   },
   update: {
@@ -41,7 +42,7 @@ function printHelp() {
   console.log("  yws-toolkit format [--check] [-- <prettier args>]");
   console.log("  yws-toolkit scaffold <newpage> [-- <args>]");
   console.log(
-    "  yws-toolkit quality <run|a11y|seo|links|jsonld|security|comment|render|compare|list-runs|delete-run|clean-runs|prune-runs> [-- <args>]",
+    "  yws-toolkit quality <run|a11y|seo|links|jsonld|security|comment|render|compare|list-runs|delete-run|clean-runs|flush-runs|prune-runs> [-- <args>]",
   );
   console.log("  yws-toolkit update <components|toolkit> [-- <args>]");
 }

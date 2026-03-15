@@ -34,41 +34,9 @@ function parseArgs(argv) {
   return options;
 }
 
-function copyPath(source, destination) {
-  const stat = fs.statSync(source);
-  if (stat.isDirectory()) {
-    fs.mkdirSync(destination, { recursive: true });
-    for (const child of fs.readdirSync(source)) {
-      copyPath(path.join(source, child), path.join(destination, child));
-    }
-    return;
-  }
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.copyFileSync(source, destination);
-}
-
-function cleanCurrentView(reportRoot) {
-  for (const target of [
-    "index.html",
-    "logs",
-    "lighthouse",
-    "pa11y",
-    "seo",
-    "links",
-    "jsonld",
-    "security",
-    "vnu",
-  ]) {
-    const full = path.join(reportRoot, target);
-    if (fs.existsSync(full)) {
-      fs.rmSync(full, { recursive: true, force: true });
-    }
-  }
-}
-
 const args = parseArgs(process.argv.slice(2));
 const cwd = process.cwd();
-const { reportRoot, viewsRoot } = qualityStorePaths(cwd);
+const { viewsRoot } = qualityStorePaths(cwd);
 const runId = args.runId || readLatestRunId(cwd);
 const format = String(args.format || "html").toLowerCase();
 
@@ -99,10 +67,4 @@ if (!fs.existsSync(sourceRoot)) {
   process.exit(1);
 }
 
-fs.mkdirSync(reportRoot, { recursive: true });
-cleanCurrentView(reportRoot);
-for (const child of fs.readdirSync(sourceRoot)) {
-  copyPath(path.join(sourceRoot, child), path.join(reportRoot, child));
-}
-
-console.log(`Rendered ${format} view for run ${runId} into reports/.`);
+console.log(`Rendered ${format} view for run ${runId} into ${sourceRoot}.`);

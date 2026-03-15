@@ -1381,14 +1381,19 @@ async function main() {
     };
 
     checkRunners.vnu = async () => {
+      const vnuArgs = selectedTarget.usesLocalBuild
+        ? [
+            "--source-dir",
+            path.join(process.cwd(), "build"),
+            "--base",
+            baseUrl,
+          ]
+        : ["--base", baseUrl, "--urls-file", urlsFile];
       const result = await runCommand(
         "node",
         [
           toolkitScriptPath("vnu-html-check.mjs"),
-          "--base",
-          baseUrl,
-          "--urls-file",
-          urlsFile,
+          ...vnuArgs,
           "--report-dir",
           path.join(REPORT_ROOT, "vnu"),
           QUIET_MODE ? "--quiet" : "",
@@ -1447,6 +1452,7 @@ async function main() {
       siteServer = null;
     }
 
+    let renderedRunId = null;
     try {
       const snapshot = writeRunSnapshot({
         cwd: process.cwd(),
@@ -1461,6 +1467,7 @@ async function main() {
         rawSources: collectRawSources(),
       });
       const runId = snapshot.runId;
+      renderedRunId = runId;
       const dataset = assignDatasetRunId(pendingDataset, runId);
       fs.writeFileSync(
         path.join(snapshot.runDir, "dataset.json"),
@@ -1492,7 +1499,10 @@ async function main() {
       console.error(`⚠️  Snapshot capture failed: ${snapshotErr.message}`);
     }
 
-    const reportUrl = `http://127.0.0.1:${REPORT_PORT}/`;
+    const reportPath = renderedRunId
+      ? `/views/html/${encodeURIComponent(renderedRunId)}/index.html`
+      : "/";
+    const reportUrl = `http://127.0.0.1:${REPORT_PORT}${reportPath}`;
     console.log(`🌐 Starting report server on ${reportUrl} (Ctrl+C to stop)`);
     const reportServer = startStaticServer(REPORT_ROOT, REPORT_PORT, "report", {
       quiet: QUIET_MODE,

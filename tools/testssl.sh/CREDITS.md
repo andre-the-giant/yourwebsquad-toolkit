@@ -1,12 +1,11 @@
-
 Full contribution, see git log.
 
-* Dirk Wetter (creator, maintainer and main contributor)
+- Dirk Wetter (creator, maintainer and main contributor)
   - Everything what's not mentioned below and is included in testssl.sh's git log
     minus what I probably forgot to mention
-  (too much other things to do at the moment and to list it would be too time consuming)
+    (too much other things to do at the moment and to list it would be too time consuming)
 
-* David Cooper (main contributor)
+- David Cooper (main contributor)
   - Major extensions to socket support for all protocols
   - extended parsing of TLS ServerHello messages
   - TLS 1.3 support (final and pre-final) with needed en/decryption
@@ -38,176 +37,176 @@ Full contribution, see git log.
   - Show server supported signature algorithms
   - Show supported certification authorities sent by the server when client auth is requested and whether certificate-based client authentication is not requested, optional, or required.
   - Provide a better verdict wrt to server order: Now per protocol and ciphers are weighted for each protocol
- -  Provide compatibility to every LibreSSL/OpenSSL versions, including OpenSSL 3.5.0
-  - Lots of fixes and improvements
+
+* Provide compatibility to every LibreSSL/OpenSSL versions, including OpenSSL 3.5.0
+* Lots of fixes and improvements
 
 ##### Further credits (in alphabetical order)
 
-* a666
+- a666
   - Bugfix
 
-* Christoph Badura
+- Christoph Badura
   - NetBSD fixes
 
-* Jim Blankendaal
+- Jim Blankendaal
   - maximum certificate lifespan of 398 days
   - ssl renegotiation amount variable
   - custom http request headers
 
-* Frank Breedijk
+- Frank Breedijk
   - Detection of insecure redirects
   - JSON and CSV output
   - CA pinning
   - Client simulations
   - CI integration, some test cases for it
 
-* Steven Danneman
+- Steven Danneman
   - Postgres and MySQL STARTTLS support
   - MongoDB support
 
-* Christian Dresen
-   - Dockerfile
+- Christian Dresen
+  - Dockerfile
 
-* enxio
-   - support for TN3270/telnet STARTTLS
+- enxio
+  - support for TN3270/telnet STARTTLS
 
-* csett86
-   - some MacOSX and Java client handshake data
+- csett86
+  - some MacOSX and Java client handshake data
 
-* Mark Felder
+- Mark Felder
   - lots of cleanups
   - Shellcheck static analysis
 
-* Laine Gholson
+- Laine Gholson
   - avahi/mDNS support
   - HTTP2/ALPN
   - bugfixes
   - former ARM binary support
 
-* Jauder Ho
+- Jauder Ho
   - GH Action to build new container images upon push
   - dependabot actions
 
-* Maciej Grela
+- Maciej Grela
   - colorless handling
 
-* Jac2NL
+- Jac2NL
   - initial support for skipping offensive vulnerability tests
 
-* Scott Johnson
+- Scott Johnson
   - Bugfix F5
 
-* Hubert Kario
+- Hubert Kario
   - helped with avoiding accidental TCP fragmentation
 
-* Brennan Kinney
+- Brennan Kinney
   - refactored multistage Dockerfiles: performance gain+address bugs/inconsistencies
 
-* Magnus Larsen
+- Magnus Larsen
   - SSL Labs Rating
 
-* Jacco de Leeuw
+- Jacco de Leeuw
   - skip checks which might trigger an IDS ($OFFENSIVE / --ids-friendly)
 
-* Manuel
+- Manuel
   - HTTP basic auth
 
-* Markus Manzke
+- Markus Manzke
   - Fix for HSTS + subdomains
   - LibreSSL patch
 
-* Jean Marsault
+- Jean Marsault
   - client auth: ideas, code snippets
 
-* Thomas Martens
+- Thomas Martens
   - adding colorblind option
   - no-rfc mapping
 
-* Peter Mosmans
+- Peter Mosmans
   - started way better cmd line parsing
   - cleanups, fixes
   - openssl sources support with the "missing" features
 
-* John Newbigin
+- John Newbigin
   - Proxy support (sockets and openssl)
 
-* Oleksandr Nosenko
+- Oleksandr Nosenko
   - non-flat JSON support (--json-pretty)
   - in file output (CSV, JSON flat, JSON non-flat) support of a minimum severity level
 
-* Brett Randall
+- Brett Randall
   - Improved (experimental) Extended Validation (EV) certificate identification.
 
-* Jonathan Roach
+- Jonathan Roach
   - TLS_FALLBACK_SCSV checks
 
-* Jonathon Rossi
+- Jonathon Rossi
   - fix for bash3 (Darwin)
   - and other Darwin fixes
 
-* Дилян Палаузов
+- Дилян Палаузов
   - bug fix for 3des report
   - reported a tricky STARTTLS bug
 
-* Thomas Patzke:
+- Thomas Patzke:
   - Support of supplying timeout value for openssl connect
 
-* Olivier Paroz
+- Olivier Paroz
   - conversion xxd --> hexdump stuff
 
-* Jeroen Wiert Pluimers
+- Jeroen Wiert Pluimers
   - Darwin binaries support
 
-* Joao Poupino
+- Joao Poupino
   - Minimize false positive detection for Renegotiation checks against Node.js etc.
 
-* Rechi
+- Rechi
   - initial MX stuff
   - fixes
 
-* Gonçalo Ribeiro
+- Gonçalo Ribeiro
   - --connect-timeout
 
-* Dmitri S
+- Dmitri S
   - inspiration & help for Darwin port
 
-* Jonas Schäfer
+- Jonas Schäfer
   - XMPP server patch
 
-* Maurizio Siddu
+- Maurizio Siddu
   - added --mTLS feature
 
-* Marcin Szychowski
+- Marcin Szychowski
   - Quick'n'dirty client certificate support
 
-* Viktor Szépe
+- Viktor Szépe
   - color function maker
 
-* Julien Vehent
+- Julien Vehent
   - supplied 1st Darwin binary
 
-* Thomas Ward
+- Thomas Ward
   - add initial IDN support
 
-* @typingArtist
+- @typingArtist
   - improved BEAST detection
 
-* @f-s
+- @f-s
   - ARM binary support
 
-* @nvsofts (NV)
+- @nvsofts (NV)
   - LibreSSL patch for GOST
 
-* @w4ntun
+- @w4ntun
   - fixed DNS via proxy
 
 Probably more I forgot to mention which did give me feedback, bug reports and helped one way or another.
 
-
 ##### Last but not least:
 
-* OpenSSL team for providing openssl.
+- OpenSSL team for providing openssl.
 
-* Ivan Ristic/Qualys for the liberal license which made it possible to make partly use of the client data
+- Ivan Ristic/Qualys for the liberal license which made it possible to make partly use of the client data
 
-* My family for supporting me doing this work
+- My family for supporting me doing this work

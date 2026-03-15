@@ -1,9 +1,10 @@
-
 ## Intro
+
 <!--
 ![GitHub Tag](https://img.shields.io/github/v/tag/testssl/testssl.sh)
 This would display the latest tag which is from the 3.2 branch. Here we don't have tags yet
 -->
+
 ![GitHub forks](https://img.shields.io/github/forks/testssl/testssl.sh)
 ![GitHub Repo stars](https://img.shields.io/github/stars/testssl/testssl.sh)
 ![GitHub Created At](https://img.shields.io/github/created-at/testssl/testssl.sh)
@@ -28,18 +29,18 @@ cryptographic flaws.
 
 ### Key features
 
-* Clear output: you can tell easily whether anything is good or bad.
-* Machine readable output (CSV, two JSON formats), also HTML output.
-* No need to install or to configure something.  No gems, CPAN, pip or the like.
-* Works out of the box: Linux, MacOS, FreeBSD, NetBSD, WSL2, MSYS2/Cygwin, OpenBSD needs bash.
-* A Dockerfile is provided, there's also an official container build @ dockerhub and GHCR.
-* Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not only web servers at port 443.
-* Toolbox: Several command line options help you to run *your* test and configure *your* output.
-* Reliability: features are tested thoroughly.
-* Privacy: It's only you who sees the result, not a third party.
-* Freedom: It's 100% open source. You can look at the code, see what's going on.
-* The development is free and open @ GitHub. Participation and contributions are welcome.
-* Unit tests ensure maturity: check for consistency, whether JSON is valid, runs under Linux+MacOS, and a lot more!
+- Clear output: you can tell easily whether anything is good or bad.
+- Machine readable output (CSV, two JSON formats), also HTML output.
+- No need to install or to configure something. No gems, CPAN, pip or the like.
+- Works out of the box: Linux, MacOS, FreeBSD, NetBSD, WSL2, MSYS2/Cygwin, OpenBSD needs bash.
+- A Dockerfile is provided, there's also an official container build @ dockerhub and GHCR.
+- Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not only web servers at port 443.
+- Toolbox: Several command line options help you to run _your_ test and configure _your_ output.
+- Reliability: features are tested thoroughly.
+- Privacy: It's only you who sees the result, not a third party.
+- Freedom: It's 100% open source. You can look at the code, see what's going on.
+- The development is free and open @ GitHub. Participation and contributions are welcome.
+- Unit tests ensure maturity: check for consistency, whether JSON is valid, runs under Linux+MacOS, and a lot more!
 
 ### License
 
@@ -53,14 +54,14 @@ to get bugfixes, other feedback and more contributions.
 
 ### Compatibility
 
-Testssl.sh is working on every Linux/BSD distribution and MacOS out of the box. Latest when 
-the very old version 2.9 was developed, most of the limitations due to disabled features from 
-the openssl client are gone due to bash-socket-based checks. An old OpenSSL-bad version is 
+Testssl.sh is working on every Linux/BSD distribution and MacOS out of the box. Latest when
+the very old version 2.9 was developed, most of the limitations due to disabled features from
+the openssl client are gone due to bash-socket-based checks. An old OpenSSL-bad version is
 supplied but these days you can also use _any_ LibreSSL or OpenSSL version.
-   testssl.sh also works on other unixoid systems out of the box, supposed they have
-`/bin/bash` >= version 3.2 and standard tools like sed and awk installed. Windows 
-(using MSYS2, Cygwin or WSL/WSL2) work too. An implicit (silent) check for binaries is performed 
-when you start testssl.sh . System V Unix needs probably to have GNU grep installed. 
+testssl.sh also works on other unixoid systems out of the box, supposed they have
+`/bin/bash` >= version 3.2 and standard tools like sed and awk installed. Windows
+(using MSYS2, Cygwin or WSL/WSL2) work too. An implicit (silent) check for binaries is performed
+when you start testssl.sh . System V Unix needs probably to have GNU grep installed.
 
 Update notifications can be found at [github](https://github.com/testssl/testssl.sh) or most important ones @ [mastodon](https://infosec.exchange/@testssl) or [bluesky](https://bsky.app/profile/testssl.bsky.social). [twitter](https://twitter.com/drwetter) is not being used anymore.
 
@@ -71,8 +72,6 @@ You can download testssl.sh branch 3.3dev just by cloning this git repository:
     git clone --depth 1 https://github.com/testssl/testssl.sh.git --branch 3.3dev
 
 3.3dev is the latest development branch which evolved from 3.2 stable. We're trying not to do big experiments in the dev branch, however the point of development is that there will be changes and changes might need a bit time to mature.
-
-
 
 #### Docker
 
@@ -94,16 +93,13 @@ or from GHCR (GitHub Container Registry which supports more platforms: linux/amd
 docker run --rm -it ghcr.io/testssl/testssl.sh <your_cmd_line>
 ```
 
-Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR and run
+Or if you have cloned this repo you also can just `cd` to the INSTALLDIR and run
 
 ```
 docker build . -t imagefoo && docker run --rm -t imagefoo testssl.net
 ```
 
 For more please consult [Dockerfile.md](https://github.com/testssl/testssl.sh/blob/3.3dev/Dockerfile.md).
-
-
-
 
 ### No Warranty
 
@@ -115,13 +111,12 @@ Testssl.sh is intended to be used as a standalone CLI tool. While we tried to ap
 
 Given the current manpower we only support n-1 versions. You're looking at the 3.3.dev branch where further development takes place before 3.4 becomes the stable version and 3.2 becomes old-stable. If you are hestitant with respect to changes, you need to use 3.2. The version 3.0.10 was the last one, there won't be any more updates.
 
-
 ### Documentation
 
-* .. it is there for reading. Please do so :-) -- at least before asking questions. See man page in groff, html and markdown format in `~/doc/`.
-* [https://testssl.sh/](https://testssl.sh/) will help to get you started.
-* There's also an [AI generated doc](https://deepwiki.com/testssl/testssl.sh), see also below.
-* Will Hunt provided a longer [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/) . While it was written for an older version (2.8), it still includes background information.
+- .. it is there for reading. Please do so :-) -- at least before asking questions. See man page in groff, html and markdown format in `~/doc/`.
+- [https://testssl.sh/](https://testssl.sh/) will help to get you started.
+- There's also an [AI generated doc](https://deepwiki.com/testssl/testssl.sh), see also below.
+- Will Hunt provided a longer [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/) . While it was written for an older version (2.8), it still includes background information.
 
 ### Contributing
 
@@ -130,7 +125,6 @@ A lot of contributors already helped to push the project where it currently is, 
 It is recommended to read [CONTRIBUTING.md](https://github.com/testssl/testssl.sh/blob/3.3dev/CONTRIBUTING.md) and please also have a look at he [Coding Convention](https://github.com/testssl/testssl.sh/blob/3.3dev/Coding_Convention.md). Before you start writing PRs with hundreds of lines, better create an issue first.
 
 In general there's also some maintenance burden, like maintaining handshakes and CA stores etc. . If you believe you can contribute and be responsible to one of those maintenance task, please speak up. That would free resources that we could use for development.
-
 
 ### Bug reports
 
@@ -141,42 +135,51 @@ https://github.com/testssl/testssl.sh/wiki/Bug-reporting. Nobody can read your t
 
 You can also debug yourself, see [here](https://github.com/testssl/testssl.sh/wiki/Findings-and-HowTo-Fix-them).
 
-----
+---
 
 ### External/related projects
 
 Please address questions not specifically to the code of testssl.sh to the respective projects below.
 
 #### AI powered docs @ DeepWiki
-* https://deepwiki.com/testssl/testssl.sh
+
+- https://deepwiki.com/testssl/testssl.sh
 
 #### Web frontend
-* https://github.com/johannesschaefer/webnettools
-* https://github.com/TKCERT/testssl.sh-webfrontend
+
+- https://github.com/johannesschaefer/webnettools
+- https://github.com/TKCERT/testssl.sh-webfrontend
 
 #### Mass scanner w parallel scans and elastic searching the results
-* https://github.com/TKCERT/testssl.sh-masscan
+
+- https://github.com/TKCERT/testssl.sh-masscan
 
 #### Privacy checker using testssl.sh
-* https://privacyscore.org
+
+- https://privacyscore.org
 
 #### Nagios / Icinga Plugins
-* https://github.com/dnmvisser/nagios-testssl (Python 3)
-* https://gitgud.malvager.net/Wazakindjes/icinga2_plugins/src/master/check_testssl.sh (Shell)
+
+- https://github.com/dnmvisser/nagios-testssl (Python 3)
+- https://gitgud.malvager.net/Wazakindjes/icinga2_plugins/src/master/check_testssl.sh (Shell)
 
 #### pentest2xlsx: generate Excel sheets from CSV
-* https://github.com/AresS31/pentest2xlsx (python)
+
+- https://github.com/AresS31/pentest2xlsx (python)
 
 #### Brew package
 
-* see [#233](https://github.com/testssl/testssl.sh/issues/233) and
+- see [#233](https://github.com/testssl/testssl.sh/issues/233) and
   [https://github.com/Homebrew/homebrew](https://github.com/Homebrew/homebrew)
 
 #### Daemon for batch execution of testssl.sh command files
-* https://github.com/bitsofinfo/testssl.sh-processor
+
+- https://github.com/bitsofinfo/testssl.sh-processor
 
 #### Daemon for batch processing of testssl.sh JSON result files for sending Slack alerts, reactive copying etc
-* https://github.com/bitsofinfo/testssl.sh-alerts
+
+- https://github.com/bitsofinfo/testssl.sh-alerts
 
 #### GitHub Actions
-* https://github.com/marketplace/actions/testssl-sh-scan
+
+- https://github.com/marketplace/actions/testssl-sh-scan

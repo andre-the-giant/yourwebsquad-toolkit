@@ -18,6 +18,7 @@ docker run --rm -it -v /tmp:/data --workdir /data ghcr.io/testssl/testssl.sh:3.2
 ```
 
 > [!NOTE]
+>
 > - The UID/GID ownership of the file will be created by the container user `testssl` (`1000:1000`), with permissions `644`.
 > - Your host directory must permit the `testssl` container user or group to write to that host volume. You could alternatively use [`docker cp`][docker-docs::cli::cp].
 
@@ -26,10 +27,12 @@ docker run --rm -it -v /tmp:/data --workdir /data ghcr.io/testssl/testssl.sh:3.2
 ### Available at DockerHub and GHCR
 
 You can pull the image from either of these registries:
+
 - DockerHub: [`drwetter/testssl.sh`][image-registry::dockerhub]
 - GHCR: [`ghcr.io/testssl/testssl.sh`][image-registry::ghcr]
 
 Supported tags:
+
 - `3.2` / `latest`
 
 ### Building the `testssl.sh` container image
@@ -43,6 +46,7 @@ docker build --tag localhost/testssl.sh:3.2 .
 ```
 
 There are two base images supported:
+
 - openSUSE Leap ([`Dockerfile`](./Dockerfile)), glibc-based + faster.
 - Alpine ([`Dockerfile`](./Dockerfile.alpine)), musl-based + half the size.
 

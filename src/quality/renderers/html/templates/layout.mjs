@@ -12,6 +12,7 @@ export function renderLayout({
   subtitle = "",
   navHtml = "",
   bodyHtml = "",
+  stylesheetHref = "./report.css",
 }) {
   return `<!doctype html>
 <html lang="en">
@@ -19,7 +20,7 @@ export function renderLayout({
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
-  <link rel="stylesheet" href="./report.css" />
+  <link rel="stylesheet" href="${escapeHtml(stylesheetHref)}" />
 </head>
 <body>
   <main class="report-page">

@@ -584,6 +584,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
   const reportRoot = path.join(cwd, "reports");
   const outDir = path.join(reportRoot, "views", "html", runId);
   const runBasePath = `/views/html/${encodeURIComponent(runId)}`;
+  const stylesheetHref = `${runBasePath}/report.css`;
   ensureDir(outDir);
 
   const checks =
@@ -594,11 +595,11 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
         ? renderCheckCard(checkId, check, {
             href:
               checkId === "lighthouse"
-                ? "./lighthouse/index.html"
-                : `./${checkId}.html`,
+                ? `${runBasePath}/lighthouse/index.html`
+                : `${runBasePath}/${checkId}.html`,
           })
         : renderUnknownCheckFallback(checkId, check, {
-            href: `./${checkId}.html`,
+            href: `${runBasePath}/${checkId}.html`,
           }),
     )
     .join("\n");
@@ -613,6 +614,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
     subtitle,
     navHtml: navHtml(runBasePath),
     bodyHtml: body,
+    stylesheetHref,
   });
   writeText(path.join(outDir, "index.html"), indexHtml);
 
@@ -710,6 +712,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
       title: `Check: ${checkId}`,
       subtitle,
       navHtml: navHtml(runBasePath),
+      stylesheetHref,
       bodyHtml:
         checkId === "pa11y"
           ? pa11yDetailsHtml(check)
@@ -756,6 +759,7 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
       title: "Check: Lighthouse",
       subtitle,
       navHtml: navHtml(runBasePath),
+      stylesheetHref,
       bodyHtml: `<section class="check-card">
         <h2>Lighthouse</h2>
         <p class="muted">Overview</p>

@@ -90,6 +90,7 @@ const QUIET_MODE = WANT_FULL_OUTPUT
 const LOG_ROOT = path.join(REPORT_ROOT, "logs");
 const LIGHTHOUSE_PROGRESS_PREFIX = "__YWS_LIGHTHOUSE_PROGRESS__";
 const SPINNER_FRAMES = ["◐", "◓", "◑", "◒"];
+const MAX_URL_SELECTION = 15;
 
 function parseCliArgs(args) {
   const options = {};
@@ -1025,6 +1026,40 @@ function writeUrlList(urls) {
   return file;
 }
 
+async function promptForUrls(urls) {
+  if (!Array.isArray(urls) || urls.length === 0) {
+    return [];
+  }
+  if (urls.length <= MAX_URL_SELECTION) {
+    return urls;
+  }
+
+  console.log(
+    `ℹ️  ${urls.length} URLs found. ${MAX_URL_SELECTION} URLs are preselected (recommended), but you can select more.`,
+  );
+  const { selectedUrls } = await inquirer.prompt([
+    {
+      type: "checkbox",
+      name: "selectedUrls",
+      message: `Select URLs to scan (recommended ${MAX_URL_SELECTION}):`,
+      choices: urls.map((url, index) => ({
+        name: `${String(index + 1).padStart(3, " ")}. ${url}`,
+        value: url,
+      })),
+      default: urls.slice(0, MAX_URL_SELECTION),
+      pageSize: 20,
+      loop: false,
+      validate: (value) => {
+        if (!Array.isArray(value) || value.length === 0) {
+          return "Select at least one URL.";
+        }
+        return true;
+      },
+    },
+  ]);
+  return selectedUrls;
+}
+
 async function main() {
   const registeredChecks = registerDefaultQualityChecks();
   const qualityConfig = await loadQualityConfig(process.cwd());
@@ -1165,7 +1200,23 @@ async function main() {
     console.log(`   Found ${urls.length} pages to test`);
     urls.forEach((u) => console.log("  -", u));
 
-    const urlsFile = writeUrlList(urls);
+    const selectedUrls = await promptForUrls(urls);
+    if (!selectedUrls.length) {
+      throw new Error("No URLs selected for testing.");
+    }
+    if (selectedUrls.length !== urls.length) {
+      console.log(
+        `🎯 Selected ${selectedUrls.length}/${urls.length} URLs for this run.`,
+      );
+      selectedUrls.forEach((u) => console.log("  ✓", u));
+    }
+    if (selectedUrls.length > MAX_URL_SELECTION) {
+      console.log(
+        `ℹ️  Soft cap exceeded: running ${selectedUrls.length} URLs (recommended: ${MAX_URL_SELECTION}).`,
+      );
+    }
+
+    const urlsFile = writeUrlList(selectedUrls);
 
     const checkRunners = {};
 

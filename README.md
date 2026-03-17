@@ -244,6 +244,11 @@ The test selection prompt adapts to the selected target environment.
   - JSON-LD validation: unavailable (local build only)
   - Security audit: available
 
+### URL selection for large sitemaps
+
+When `quality run` discovers more than `15` URLs from sitemap/crawl, it prompts you to select which URLs to include in that run.  
+The first `15` URLs are preselected as a recommendation, but you can select more and the run will still proceed.
+
 ### Run snapshots
 
 `yws-toolkit quality run` now also writes immutable snapshots:

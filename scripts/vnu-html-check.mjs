@@ -8,6 +8,9 @@ import { preferIpv4Loopback } from "../src/quality/common/url.mjs";
 const DEFAULT_BASE_URL = process.env.BASE_URL || "http://localhost:4321";
 const DEFAULT_REPORT_DIR =
   process.env.VNU_REPORT_DIR || path.join(process.cwd(), "reports/vnu");
+const VNU_INCLUDE_CSS = process.env.VNU_INCLUDE_CSS === "1";
+const VNU_IGNORE_ASTRO_STYLE_IS_GLOBAL =
+  process.env.VNU_IGNORE_ASTRO_STYLE_IS_GLOBAL !== "0";
 
 function parseArgs(argv) {
   const opts = {};
@@ -123,6 +126,33 @@ function normalizeSeverity(message) {
   if (message?.type === "error") return "error";
   if (message?.subType === "warning") return "warning";
   return "info";
+}
+
+function messageText(message) {
+  return String(message?.message || "").trim();
+}
+
+function isCssValidatorMessage(message) {
+  const text = messageText(message);
+  return /^css\s*:/i.test(text);
+}
+
+function isAstroStyleIsGlobalMessage(message) {
+  const text = messageText(message);
+  return /attribute\s*["“]is:global["”]\s*not\s*allowed\s*on\s*element\s*["“]style["”]\s*at\s*this\s*point\.?/i.test(
+    text,
+  );
+}
+
+function shouldIgnoreMessage(message) {
+  if (!VNU_INCLUDE_CSS && isCssValidatorMessage(message)) return true;
+  if (
+    VNU_IGNORE_ASTRO_STYLE_IS_GLOBAL &&
+    isAstroStyleIsGlobalMessage(message)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function uniqueCount(items) {
@@ -263,7 +293,8 @@ async function main() {
   ];
   const run = await runCommand("npx", cmdArgs, { quiet });
   const payload = parseVnuJson(run.stdout || run.stderr);
-  const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+  const allMessages = Array.isArray(payload?.messages) ? payload.messages : [];
+  const messages = allMessages.filter((message) => !shouldIgnoreMessage(message));
   const issues = messages.map((message) => ({
     severity: normalizeSeverity(message),
     type: message?.type || null,
@@ -288,6 +319,7 @@ async function main() {
   const stats = {
     urlsTested: sourceDir ? htmlFiles.length : urls.length,
     pagesWithIssues,
+    messagesIgnored: allMessages.length - messages.length,
     messagesTotal: issues.length,
     errorCount,
     warningCount,

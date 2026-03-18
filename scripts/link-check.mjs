@@ -24,6 +24,17 @@ const CHECK_EXTERNAL = args.skipExternal
   ? false
   : process.env.CHECK_EXTERNAL_LINKS !== "0";
 const QUIET_MODE = Boolean(args.quiet || process.env.LINKS_QUIET === "1");
+const LINKINATOR_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.LINKINATOR_CONCURRENCY || 5) || 5,
+);
+const LINKINATOR_RETRY_ERRORS = process.env.LINKINATOR_RETRY_ERRORS !== "0";
+const LINKINATOR_RETRY_ERRORS_COUNT = Math.max(
+  1,
+  Number(process.env.LINKINATOR_RETRY_ERRORS_COUNT || 2) || 2,
+);
+const LINKINATOR_TREAT_STATUS_0_AS_BROKEN =
+  process.env.LINKINATOR_TREAT_STATUS_0_AS_BROKEN === "1";
 const EXTERNAL_BOT_PROTECTION_HOSTS = new Set(
   (
     process.env.LINK_CHECK_BOT_PROTECTION_HOSTS ||
@@ -171,6 +182,18 @@ function isLikelyBotBlockedStatus(status) {
   return new Set([401, 403, 429]).has(Number(status || 0));
 }
 
+function dedupeLinkinatorEntries(entries) {
+  const seen = new Set();
+  const unique = [];
+  for (const entry of entries) {
+    const key = `${entry?.url || ""}|${Number(entry?.status || 0) || 0}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(entry);
+  }
+  return unique;
+}
+
 async function runLinkinator(baseUrl) {
   const args = [
     "--yes",
@@ -179,9 +202,15 @@ async function runLinkinator(baseUrl) {
     "--recurse",
     "--format",
     "json",
+    "--concurrency",
+    String(LINKINATOR_CONCURRENCY),
     "--verbosity",
     QUIET_MODE ? "error" : "warning",
   ];
+  if (LINKINATOR_RETRY_ERRORS) {
+    args.push("--retry-errors");
+    args.push("--retry-errors-count", String(LINKINATOR_RETRY_ERRORS_COUNT));
+  }
   const result = await runCommandCapture("npx", args, { quiet: QUIET_MODE });
   if (result.error) {
     return {
@@ -195,17 +224,26 @@ async function runLinkinator(baseUrl) {
   }
   const payload = parseJsonLoose(result.stdout || result.stderr) || {};
   const links = Array.isArray(payload?.links) ? payload.links : [];
-  const brokenRaw = links
+  const brokenRaw = dedupeLinkinatorEntries(
+    links
     .filter((entry) => String(entry?.state || "").toUpperCase() === "BROKEN")
     .map((entry) => ({
       url: entry?.url || null,
       parent: entry?.parent || null,
       status: Number(entry?.status || 0) || 0,
       state: entry?.state || "BROKEN",
-    }));
+    })),
+  );
   const ignored = [];
   const broken = [];
   for (const entry of brokenRaw) {
+    if (!LINKINATOR_TREAT_STATUS_0_AS_BROKEN && Number(entry.status) === 0) {
+      ignored.push({
+        ...entry,
+        reason: "Transient/unknown fetch failure (status 0)",
+      });
+      continue;
+    }
     const imageLike = isImageLikeUrl(entry.url);
     if (imageLike && isLikelyBotBlockedStatus(entry.status)) {
       ignored.push({
@@ -223,6 +261,7 @@ async function runLinkinator(baseUrl) {
     passed: Boolean(payload?.passed),
     brokenCount: broken.length,
     ignoredCount,
+    dedupedBrokenRawCount: brokenRaw.length,
     rawCount: links.length,
     broken,
     ignored,

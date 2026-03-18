@@ -294,7 +294,9 @@ async function main() {
   const run = await runCommand("npx", cmdArgs, { quiet });
   const payload = parseVnuJson(run.stdout || run.stderr);
   const allMessages = Array.isArray(payload?.messages) ? payload.messages : [];
-  const messages = allMessages.filter((message) => !shouldIgnoreMessage(message));
+  const messages = allMessages.filter(
+    (message) => !shouldIgnoreMessage(message),
+  );
   const issues = messages.map((message) => ({
     severity: normalizeSeverity(message),
     type: message?.type || null,

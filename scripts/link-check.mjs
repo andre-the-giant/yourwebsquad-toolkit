@@ -226,13 +226,13 @@ async function runLinkinator(baseUrl) {
   const links = Array.isArray(payload?.links) ? payload.links : [];
   const brokenRaw = dedupeLinkinatorEntries(
     links
-    .filter((entry) => String(entry?.state || "").toUpperCase() === "BROKEN")
-    .map((entry) => ({
-      url: entry?.url || null,
-      parent: entry?.parent || null,
-      status: Number(entry?.status || 0) || 0,
-      state: entry?.state || "BROKEN",
-    })),
+      .filter((entry) => String(entry?.state || "").toUpperCase() === "BROKEN")
+      .map((entry) => ({
+        url: entry?.url || null,
+        parent: entry?.parent || null,
+        status: Number(entry?.status || 0) || 0,
+        state: entry?.state || "BROKEN",
+      })),
   );
   const ignored = [];
   const broken = [];

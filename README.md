@@ -75,6 +75,24 @@ Available commands:
 }
 ```
 
+## Form test behavior
+
+`yws-toolkit quality form` checks generated API-backed forms found on tested URLs and writes artifacts in `reports/form`.
+
+Key behavior:
+
+- If no generated forms are detected, the form check is skipped and passes.
+- If legacy form definitions are detected in `src/content/forms`, the command asks to migrate to `src/forms`.
+- If migration is accepted, files are moved and tests continue.
+- If migration is declined, form tests are skipped and the form check fails with a preflight failure.
+
+Optional flag:
+
+- `--migrate-legacy-forms=prompt|yes|no`
+  - `prompt` (default): interactive yes/no prompt
+  - `yes`: auto-migrate then continue tests
+  - `no`: do not migrate; skip form probes and fail this check
+
 ## Helpers
 
 Helper modules are exported as package subpaths.

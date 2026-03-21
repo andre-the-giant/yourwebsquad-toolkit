@@ -9,7 +9,7 @@ export function normalizeFormPayload(raw, options = {}) {
 
   const failedCount =
     stats && typeof stats === "object"
-      ? toNumber(stats.failed)
+      ? toNumber(stats.failed) + toNumber(stats.preflightFailed)
       : issues.filter((issue) => issue?.status === "failed").length;
 
   return {

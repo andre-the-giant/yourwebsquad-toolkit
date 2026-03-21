@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { spawn } from "node:child_process";
+import readline from "node:readline/promises";
 import { parse } from "node-html-parser";
 import puppeteer from "puppeteer";
 
@@ -47,6 +48,18 @@ function parseArgs(argv = []) {
 
     if (arg === "--quiet" || arg === "-q") {
       options.quiet = true;
+    }
+
+    if ((arg === "--migrate-legacy-forms" || arg === "-m") && argv[i + 1]) {
+      options.migrateLegacyForms = String(argv[i + 1]).toLowerCase();
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("--migrate-legacy-forms=")) {
+      options.migrateLegacyForms = String(
+        arg.slice("--migrate-legacy-forms=".length),
+      ).toLowerCase();
+      continue;
     }
   }
 
@@ -135,9 +148,176 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function listFormDefinitionFiles(baseDir) {
+  if (!baseDir || !fs.existsSync(baseDir)) return [];
+  const stack = [baseDir];
+  const out = [];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!/\.(json|ya?ml)$/i.test(entry.name)) continue;
+      out.push(fullPath);
+    }
+  }
+
+  out.sort();
+  return out;
+}
+
+function detectFormSourceLayout(projectRoot = process.cwd()) {
+  const srcFormsDir = path.join(projectRoot, "src", "forms");
+  const legacyFormsDir = path.join(projectRoot, "src", "content", "forms");
+  const srcContentDir = path.join(projectRoot, "src", "content");
+
+  const srcFormsFiles = listFormDefinitionFiles(srcFormsDir);
+  const legacyFormsFiles = listFormDefinitionFiles(legacyFormsDir);
+  const alerts = [];
+  const notices = [];
+  const recommendations = [];
+
+  if (legacyFormsFiles.length > 0) {
+    alerts.push({
+      type: "legacy-forms-path",
+      severity: "warning",
+      message:
+        "Legacy form folder detected at /src/content/forms. Migrate forms to /src/forms.",
+    });
+    recommendations.push(
+      "Move files from /src/content/forms to /src/forms, then remove /src/content if no longer needed.",
+    );
+  }
+
+  if (srcFormsFiles.length === 0) {
+    notices.push({
+      type: "missing-forms-config",
+      severity: "info",
+      message:
+        "No form definition files were found under /src/forms.",
+    });
+  }
+
+  return {
+    srcFormsDir,
+    srcContentDir,
+    legacyFormsDir,
+    srcFormsExists: fs.existsSync(srcFormsDir),
+    legacyFormsExists: fs.existsSync(legacyFormsDir),
+    srcFormsFiles,
+    legacyFormsFiles,
+    alerts,
+    notices,
+    recommendations,
+  };
+}
+
+async function askYesNo(message, { quiet = false } = {}) {
+  if (quiet || !process.stdin.isTTY || !process.stdout.isTTY) {
+    return null;
+  }
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    const answer = (await rl.question(`${message} [y/N]: `))
+      .trim()
+      .toLowerCase();
+    return answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
+}
+
+function listAllFiles(baseDir) {
+  if (!baseDir || !fs.existsSync(baseDir)) return [];
+  const stack = [baseDir];
+  const out = [];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.isFile()) {
+        out.push(fullPath);
+      }
+    }
+  }
+  out.sort();
+  return out;
+}
+
+function maybeRemoveDirIfEmpty(targetDir) {
+  if (!targetDir || !fs.existsSync(targetDir)) return;
+  const entries = fs.readdirSync(targetDir);
+  if (entries.length === 0) {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+  }
+}
+
+function migrateLegacyFormsLayout(layout = {}) {
+  const legacyFormsDir = String(layout?.legacyFormsDir || "");
+  const srcFormsDir = String(layout?.srcFormsDir || "");
+  const srcContentDir = String(layout?.srcContentDir || "");
+
+  if (!legacyFormsDir || !fs.existsSync(legacyFormsDir)) {
+    return { movedFiles: 0, mode: "none" };
+  }
+
+  fs.mkdirSync(srcFormsDir, { recursive: true });
+  const sourceFiles = listAllFiles(legacyFormsDir);
+  const conflicts = [];
+  for (const sourceFile of sourceFiles) {
+    const rel = path.relative(legacyFormsDir, sourceFile);
+    const target = path.join(srcFormsDir, rel);
+    if (fs.existsSync(target)) conflicts.push(rel);
+  }
+  if (conflicts.length > 0) {
+    throw new Error(
+      `Cannot migrate legacy forms because destination already contains conflicting files: ${conflicts.slice(0, 8).join(", ")}`,
+    );
+  }
+
+  for (const sourceFile of sourceFiles) {
+    const rel = path.relative(legacyFormsDir, sourceFile);
+    const target = path.join(srcFormsDir, rel);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.renameSync(sourceFile, target);
+  }
+
+  if (fs.existsSync(legacyFormsDir)) {
+    fs.rmSync(legacyFormsDir, { recursive: true, force: true });
+  }
+  maybeRemoveDirIfEmpty(path.dirname(legacyFormsDir));
+  maybeRemoveDirIfEmpty(srcContentDir);
+
+  return { movedFiles: sourceFiles.length, mode: "merge" };
+}
+
 function writePlaceholderReport(reportDir, payload = {}) {
   const stats = payload?.stats || {};
   const issues = Array.isArray(payload?.issues) ? payload.issues : [];
+  const testCases = Array.isArray(payload?.testCases) ? payload.testCases : [];
+  const preflight = payload?.preflight || {};
+  const preflightAlerts = Array.isArray(preflight?.alerts) ? preflight.alerts : [];
+  const preflightNotices = Array.isArray(preflight?.notices)
+    ? preflight.notices
+    : [];
+  const recommendations = Array.isArray(preflight?.recommendations)
+    ? preflight.recommendations
+    : [];
+  const execution = payload?.execution || {};
   const frontendProbeResults = Array.isArray(payload?.frontendProbeResults)
     ? payload.frontendProbeResults
     : [];
@@ -179,8 +359,11 @@ function writePlaceholderReport(reportDir, payload = {}) {
     .map(
       (item) => `<tr>
   <td>${escapeHtml(item?.pageUrl || "")}</td>
+  <td>${escapeHtml(item?.formId || "")}</td>
+  <td>${escapeHtml(item?.selector || "")}</td>
   <td>${escapeHtml(item?.violationCount ?? 0)}</td>
-  <td>${escapeHtml(item?.success ? "pass" : "fail")}</td>
+  <td>${escapeHtml(item?.status || (item?.success ? "pass" : "fail"))}</td>
+  <td>${escapeHtml(item?.message || "")}</td>
   <td>${escapeHtml(item?.outputPath || "")}</td>
 </tr>`,
     )
@@ -192,6 +375,38 @@ function writePlaceholderReport(reportDir, payload = {}) {
   <td>${escapeHtml(issue?.pageUrl || "")}</td>
   <td>${escapeHtml(issue?.formIndex ?? "")}</td>
   <td>${escapeHtml(issue?.message || "")}</td>
+</tr>`,
+    )
+    .join("\n");
+  const preflightRows = preflightAlerts
+    .map(
+      (item) => `<tr>
+  <td>${escapeHtml(item?.severity || "warning")}</td>
+  <td>${escapeHtml(item?.type || "")}</td>
+  <td>${escapeHtml(item?.message || "")}</td>
+</tr>`,
+    )
+    .join("\n");
+  const preflightNoticeRows = preflightNotices
+    .map(
+      (item) => `<tr>
+  <td>${escapeHtml(item?.severity || "info")}</td>
+  <td>${escapeHtml(item?.type || "")}</td>
+  <td>${escapeHtml(item?.message || "")}</td>
+</tr>`,
+    )
+    .join("\n");
+  const recommendationRows = recommendations
+    .map((line) => `<li>${escapeHtml(line)}</li>`)
+    .join("");
+  const testCaseRows = testCases
+    .map(
+      (entry) => `<tr>
+  <td>${escapeHtml(entry?.pageUrl || "")}</td>
+  <td>${escapeHtml(entry?.formIndex ?? "")}</td>
+  <td>${escapeHtml(entry?.testType || "")}</td>
+  <td>${escapeHtml(entry?.status || "")}</td>
+  <td>${escapeHtml(entry?.message || "")}</td>
 </tr>`,
     )
     .join("\n");
@@ -218,8 +433,37 @@ function writePlaceholderReport(reportDir, payload = {}) {
     <span class="chip">URLs tested: ${escapeHtml(stats.urlsTested ?? 0)}</span>
     <span class="chip">Forms: ${escapeHtml(stats.totalForms ?? 0)}</span>
     <span class="chip">Tests run: ${escapeHtml(stats.testsRun ?? 0)}</span>
-    <span class="chip">Failed: ${escapeHtml(stats.failed ?? 0)}</span>
+    <span class="chip">Failed assertions: ${escapeHtml(stats.failed ?? 0)}</span>
+    <span class="chip">Preflight failures: ${escapeHtml(stats.preflightFailed ?? 0)}</span>
+    <span class="chip">Alerts: ${escapeHtml(stats.alerts ?? 0)}</span>
+    <span class="chip">Skipped: ${escapeHtml(stats.skipped ? "yes" : "no")}</span>
+    <span class="chip">Test cases: ${escapeHtml(testCases.length)}</span>
   </div>
+
+  <p><strong>Execution status:</strong> ${escapeHtml(execution?.status || "completed")}${execution?.reason ? ` - ${escapeHtml(execution.reason)}` : ""}</p>
+
+  <h2>Preflight checks</h2>
+  <table>
+    <thead>
+      <tr><th>Severity</th><th>Type</th><th>Message</th></tr>
+    </thead>
+    <tbody>${preflightRows || '<tr><td colspan="3">No preflight alerts.</td></tr>'}</tbody>
+  </table>
+  <table>
+    <thead>
+      <tr><th>Severity</th><th>Type</th><th>Message</th></tr>
+    </thead>
+    <tbody>${preflightNoticeRows || '<tr><td colspan="3">No preflight notices.</td></tr>'}</tbody>
+  </table>
+  ${recommendationRows ? `<p><strong>Recommendations</strong></p><ul>${recommendationRows}</ul>` : ""}
+
+  <h2>Test cases</h2>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Form index</th><th>Test type</th><th>Status</th><th>Result details</th></tr>
+    </thead>
+    <tbody>${testCaseRows || '<tr><td colspan="5">No test cases.</td></tr>'}</tbody>
+  </table>
 
   <h2>Frontend validation probes</h2>
   <table>
@@ -237,12 +481,12 @@ function writePlaceholderReport(reportDir, payload = {}) {
     <tbody>${apiRows || '<tr><td colspan="7">No API probes.</td></tr>'}</tbody>
   </table>
 
-  <h2>Form accessibility (aXe)</h2>
+  <h2>Form accessibility (aXe, form scope only)</h2>
   <table>
     <thead>
-      <tr><th>Page</th><th>Violations</th><th>Status</th><th>Artifact</th></tr>
+      <tr><th>Page</th><th>Form id</th><th>Selector</th><th>Violations</th><th>Status</th><th>Details</th><th>Artifact</th></tr>
     </thead>
-    <tbody>${a11yRows || '<tr><td colspan="4">No form a11y probes.</td></tr>'}</tbody>
+    <tbody>${a11yRows || '<tr><td colspan="7">No form a11y probes.</td></tr>'}</tbody>
   </table>
 
   <h2>Failure details</h2>
@@ -251,6 +495,21 @@ function writePlaceholderReport(reportDir, payload = {}) {
       <tr><th>Type</th><th>Page</th><th>Form index</th><th>Message</th></tr>
     </thead>
     <tbody>${issueRows || '<tr><td colspan="4">No failures.</td></tr>'}</tbody>
+  </table>
+
+  <h2>Test type legend</h2>
+  <table>
+    <thead>
+      <tr><th>Test type</th><th>Meaning</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>preflight</td><td>Project structure checks before probes start (for example legacy forms folder detection).</td></tr>
+      <tr><td>frontend</td><td>Browser-side required-field validation behavior on discovered forms.</td></tr>
+      <tr><td>api-valid</td><td>Submission with a valid payload, expected to succeed with JSON success response.</td></tr>
+      <tr><td>api-invalid</td><td>Submission with invalid payload (required fields emptied), expected to fail validation.</td></tr>
+      <tr><td>a11y</td><td>Accessibility scan (aXe WCAG 2.1 A/AA tags) scoped to each discovered form selector (form#id).</td></tr>
+      <tr><td>suite</td><td>Global form-test execution state (for example skipped with reason).</td></tr>
+    </tbody>
   </table>
 </body>
 </html>`;
@@ -610,70 +869,109 @@ async function runFrontendProbes(forms = [], { quiet = false } = {}) {
   return results;
 }
 
-async function runAxeOnce(url, { reportDir, quiet = false } = {}) {
-  const outName = `form-a11y-${slugify(url) || "page"}.json`;
-  const args = [
-    "axe",
-    url,
-    "--tags",
-    "wcag2a,wcag2aa",
-    "--dir",
-    reportDir,
-    "--save",
-    outName,
-    "--show-errors",
-    "false",
-  ];
-
-  const exitCode = await new Promise((resolve) => {
-    const child = spawn("npx", args, {
-      shell: false,
-      stdio: quiet ? "ignore" : "inherit",
-      env: process.env,
-    });
-    child.on("exit", (code) => resolve(code ?? 1));
-    child.on("error", () => resolve(1));
-  });
-
-  const outPath = path.join(reportDir, outName);
-  let payload = null;
-  if (fs.existsSync(outPath)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(outPath, "utf8"));
-      payload = Array.isArray(parsed) ? parsed[0] || null : parsed;
-    } catch {
-      payload = null;
-    }
-  }
-
-  const violations = Array.isArray(payload?.violations)
-    ? payload.violations
-    : [];
-  return {
-    pageUrl: url,
-    exitCode,
-    violationCount: violations.length,
-    success: exitCode === 0 && violations.length === 0,
-    outputPath: outPath,
-  };
-}
-
 async function runFormA11yProbes(
   forms = [],
   { reportDir, quiet = false } = {},
 ) {
-  const urls = Array.from(
-    new Set(
-      (Array.isArray(forms) ? forms : [])
-        .map((form) => normalizeUrl(form?.pageUrl))
-        .filter(Boolean),
-    ),
-  );
-
   const results = [];
-  for (const pageUrl of urls) {
-    const result = await runAxeOnce(pageUrl, { reportDir, quiet });
-    results.push(result);
+  const list = Array.isArray(forms) ? forms : [];
+  for (const form of list) {
+    const pageUrl = normalizeUrl(form?.pageUrl);
+    const formIndex = Number(form?.formIndex ?? 0);
+    const formId = String(form?.id || "").trim();
+    if (!pageUrl) {
+      results.push({
+        pageUrl: "",
+        formIndex,
+        formId,
+        selector: "",
+        exitCode: null,
+        violationCount: 0,
+        success: false,
+        status: "error",
+        outputPath: "",
+        message: "Missing page URL for form a11y probe.",
+      });
+      continue;
+    }
+    if (!formId) {
+      results.push({
+        pageUrl,
+        formIndex,
+        formId: "",
+        selector: "",
+        exitCode: null,
+        violationCount: 0,
+        success: true,
+        status: "skipped",
+        outputPath: "",
+        message: "Skipped form-only a11y: missing form id attribute.",
+      });
+      continue;
+    }
+
+    const selector = `form#${formId.replace(/([ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1")}`;
+    const outName = `form-a11y-${slugify(pageUrl) || "page"}-${slugify(formId) || String(formIndex)}.json`;
+    const args = [
+      "axe",
+      pageUrl,
+      "--include",
+      selector,
+      "--tags",
+      "wcag2a,wcag2aa",
+      "--dir",
+      reportDir,
+      "--save",
+      outName,
+      "--show-errors",
+      "false",
+    ];
+    const exitCode = await new Promise((resolve) => {
+      const child = spawn("npx", args, {
+        shell: false,
+        stdio: quiet ? "ignore" : "inherit",
+        env: process.env,
+      });
+      child.on("exit", (code) => resolve(code ?? 1));
+      child.on("error", () => resolve(1));
+    });
+
+    const outPath = path.join(reportDir, outName);
+    let payload = null;
+    if (fs.existsSync(outPath)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(outPath, "utf8"));
+        payload = Array.isArray(parsed) ? parsed[0] || null : parsed;
+      } catch {
+        payload = null;
+      }
+    }
+    const violations = Array.isArray(payload?.violations)
+      ? payload.violations
+      : [];
+    const status =
+      exitCode === 0
+        ? violations.length === 0
+          ? "pass"
+          : "fail"
+        : "error";
+    results.push({
+      pageUrl,
+      formIndex,
+      formId,
+      selector,
+      exitCode,
+      violationCount: violations.length,
+      success: status === "pass",
+      status,
+      outputPath: outPath,
+      message:
+        status === "pass"
+          ? "No violations in selected form scope."
+          : status === "fail"
+            ? `Found ${violations.length} violation(s) in selected form scope.`
+            : "aXe command failed for selected form scope.",
+    });
   }
   return results;
 }
@@ -708,91 +1006,262 @@ function buildIssues({
   }
 
   for (const entry of formA11yResults) {
-    if (entry?.success) continue;
+    if (entry?.status === "pass" || entry?.status === "skipped") continue;
     issues.push({
       type: "a11y",
       pageUrl: entry?.pageUrl || "",
-      formIndex: "",
-      message: `aXe violation count: ${Number(entry?.violationCount || 0)}`,
+      formIndex: entry?.formIndex ?? "",
+      message:
+        entry?.message ||
+        `aXe violation count: ${Number(entry?.violationCount || 0)}`,
     });
   }
 
   return issues;
 }
 
+function probeStatus(success, error = "") {
+  if (error) return "error";
+  return success ? "pass" : "fail";
+}
+
+function buildTestCases({
+  frontendProbeResults = [],
+  apiProbeResults = [],
+  formA11yResults = [],
+  preflight = {},
+  execution = {},
+} = {}) {
+  const cases = [];
+
+  for (const alert of Array.isArray(preflight?.alerts) ? preflight.alerts : []) {
+    cases.push({
+      pageUrl: "-",
+      formIndex: "",
+      testType: "preflight",
+      status: alert?.type === "legacy-forms-path" ? "fail" : "warn",
+      message: alert?.message || "Preflight alert",
+    });
+  }
+
+  for (const note of Array.isArray(preflight?.notices) ? preflight.notices : []) {
+    cases.push({
+      pageUrl: "-",
+      formIndex: "",
+      testType: "preflight",
+      status: "info",
+      message: note?.message || "Preflight notice",
+    });
+  }
+
+  for (const entry of frontendProbeResults) {
+    const requiredCount = Number(entry?.snapshot?.validation?.requiredCount || 0);
+    const requiredInvalidCount = Number(
+      entry?.snapshot?.validation?.requiredInvalidCount || 0,
+    );
+    cases.push({
+      pageUrl: entry?.pageUrl || "",
+      formIndex: entry?.formIndex ?? "",
+      testType: "frontend",
+      status: probeStatus(entry?.success, entry?.error),
+      message:
+        entry?.error ||
+        `required fields: ${requiredCount}, invalid required after blanking: ${requiredInvalidCount}`,
+    });
+  }
+
+  for (const entry of apiProbeResults) {
+    const validProbe = entry?.validProbe || {};
+    const validPass = Boolean(entry?.assertions?.validExpectedSuccess);
+    cases.push({
+      pageUrl: entry?.pageUrl || "",
+      formIndex: entry?.formIndex ?? "",
+      testType: "api-valid",
+      status: probeStatus(validPass, validProbe?.error),
+      message:
+        validProbe?.error ||
+        `status=${validProbe?.status ?? "n/a"}, content-type=${validProbe?.contentType || "n/a"}, ok=${String(validProbe?.responseJson?.ok)}`,
+    });
+
+    const invalidProbe = entry?.invalidProbe || {};
+    const invalidPass = Boolean(entry?.assertions?.invalidExpectedFailure);
+    cases.push({
+      pageUrl: entry?.pageUrl || "",
+      formIndex: entry?.formIndex ?? "",
+      testType: "api-invalid",
+      status: probeStatus(invalidPass, invalidProbe?.error),
+      message:
+        invalidProbe?.error ||
+        `status=${invalidProbe?.status ?? "n/a"}, content-type=${invalidProbe?.contentType || "n/a"}, expected failure on invalid payload`,
+    });
+  }
+
+  for (const entry of formA11yResults) {
+    cases.push({
+      pageUrl: entry?.pageUrl || "",
+      formIndex: entry?.formIndex ?? "",
+      testType: "a11y",
+      status: entry?.status || probeStatus(entry?.success, ""),
+      message:
+        entry?.message ||
+        `aXe violations: ${Number(entry?.violationCount || 0)}`,
+    });
+  }
+
+  if (execution?.status === "skipped") {
+    cases.push({
+      pageUrl: "-",
+      formIndex: "",
+      testType: "suite",
+      status: "skipped",
+      message: execution?.reason || "Form tests skipped",
+    });
+  }
+
+  return cases;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const reportDir = prepareReportDir(args.reportDir);
   const urls = loadUrlsFromFile(args.urlsFile);
-  const forms = await discoverForms(urls, { quiet: Boolean(args.quiet) });
-  const formA11yResults = await runFormA11yProbes(forms, {
-    reportDir,
-    quiet: Boolean(args.quiet),
-  });
-  const frontendProbeResults = await runFrontendProbes(forms, {
-    quiet: Boolean(args.quiet),
-  });
-  const payloadsPreview = forms.map((form) => ({
-    pageUrl: form.pageUrl,
-    formIndex: form.formIndex,
-    actionUrl: form.actionUrl,
-    method: form.method,
-    payload: buildSubmissionPayload(form),
-  }));
+  let preflight = detectFormSourceLayout(process.cwd());
+  const quiet = Boolean(args.quiet);
+  let migrationDecision = "not-needed";
+  let migrationPerformed = false;
+  let skipped = false;
+  let skippedReason = "";
+
+  if (preflight.legacyFormsFiles.length > 0) {
+    const mode = String(args.migrateLegacyForms || "prompt");
+    let shouldMigrate = false;
+
+    if (mode === "yes" || mode === "true") {
+      shouldMigrate = true;
+      migrationDecision = "yes";
+    } else if (mode === "no" || mode === "false") {
+      shouldMigrate = false;
+      migrationDecision = "no";
+    } else {
+      const answer = await askYesNo(
+        "Legacy forms found in /src/content/forms. Migrate now to /src/forms and continue form tests?",
+        { quiet },
+      );
+      shouldMigrate = Boolean(answer);
+      migrationDecision = answer === null ? "no-non-interactive" : shouldMigrate ? "yes" : "no";
+    }
+
+    if (shouldMigrate) {
+      const migration = migrateLegacyFormsLayout(preflight);
+      migrationPerformed = migration.movedFiles > 0;
+      preflight = detectFormSourceLayout(process.cwd());
+      preflight.notices.push({
+        type: "legacy-forms-migrated",
+        severity: "info",
+        message: `Migrated ${migration.movedFiles} file(s) from /src/content/forms to /src/forms.`,
+      });
+    } else {
+      skipped = true;
+      skippedReason =
+        "Legacy folder structure detected and migration declined. Form tests skipped.";
+    }
+  }
+
+  let forms = [];
+  let formA11yResults = [];
+  let frontendProbeResults = [];
   const apiProbeResults = [];
-  for (const item of payloadsPreview) {
-    const baseForm = forms.find(
-      (entry) =>
-        entry.pageUrl === item.pageUrl && entry.formIndex === item.formIndex,
-    );
+  let payloadsPreview = [];
 
-    const validPayload = withEmailTestOverrides(item.payload);
-    const validProbe = await runApiProbe(
-      {
-        pageUrl: item.pageUrl,
-        formIndex: item.formIndex,
-        actionUrl: item.actionUrl,
-        method: item.method,
-      },
-      validPayload,
-      {
-        quiet: Boolean(args.quiet),
-        headers: {
-          "X-YWS-Test-Recipient": "hello@yourwebsquad.com",
-          "X-YWS-Test-Subject-Prefix": "[THIS IS A TEST] ",
-          "X-YWS-Test-Body-Prefix": "THIS IS A TEST - DO NOT ANSWER",
-        },
-      },
-    );
-    const invalidPayload = buildInvalidPayloadMissingRequired(
-      baseForm,
-      item.payload,
-    );
-    const invalidProbe = await runApiProbe(
-      {
-        pageUrl: item.pageUrl,
-        formIndex: item.formIndex,
-        actionUrl: item.actionUrl,
-        method: item.method,
-      },
-      invalidPayload,
-      { quiet: Boolean(args.quiet) },
-    );
+  if (!skipped) {
+    forms = await discoverForms(urls, { quiet });
+    if (forms.length === 0) {
+      skipped = true;
+      skippedReason = "No generated form has been detected on tested URLs.";
+      preflight.notices.push({
+        type: "no-generated-forms-detected",
+        severity: "info",
+        message: skippedReason,
+      });
+    }
+  }
 
-    apiProbeResults.push({
-      pageUrl: item.pageUrl,
-      formIndex: item.formIndex,
-      actionUrl: item.actionUrl,
-      method: item.method,
-      validProbe,
-      invalidProbe,
-      assertions: {
-        validExpectedSuccess: Boolean(validProbe.success),
-        invalidExpectedFailure: !invalidProbe.success,
-      },
+  if (!skipped) {
+    formA11yResults = await runFormA11yProbes(forms, {
+      reportDir,
+      quiet,
+    });
+    frontendProbeResults = await runFrontendProbes(forms, {
+      quiet,
     });
   }
+  if (!skipped) {
+    payloadsPreview = forms.map((form) => ({
+      pageUrl: form.pageUrl,
+      formIndex: form.formIndex,
+      actionUrl: form.actionUrl,
+      method: form.method,
+      payload: buildSubmissionPayload(form),
+    }));
+    for (const item of payloadsPreview) {
+      const baseForm = forms.find(
+        (entry) =>
+          entry.pageUrl === item.pageUrl && entry.formIndex === item.formIndex,
+      );
+
+      const validPayload = withEmailTestOverrides(item.payload);
+      const validProbe = await runApiProbe(
+        {
+          pageUrl: item.pageUrl,
+          formIndex: item.formIndex,
+          actionUrl: item.actionUrl,
+          method: item.method,
+        },
+        validPayload,
+        {
+          quiet,
+          headers: {
+            "X-YWS-Test-Recipient": "hello@yourwebsquad.com",
+            "X-YWS-Test-Subject-Prefix": "[THIS IS A TEST] ",
+            "X-YWS-Test-Body-Prefix": "THIS IS A TEST - DO NOT ANSWER",
+          },
+        },
+      );
+      const invalidPayload = buildInvalidPayloadMissingRequired(
+        baseForm,
+        item.payload,
+      );
+      const invalidProbe = await runApiProbe(
+        {
+          pageUrl: item.pageUrl,
+          formIndex: item.formIndex,
+          actionUrl: item.actionUrl,
+          method: item.method,
+        },
+        invalidPayload,
+        { quiet },
+      );
+
+      apiProbeResults.push({
+        pageUrl: item.pageUrl,
+        formIndex: item.formIndex,
+        actionUrl: item.actionUrl,
+        method: item.method,
+        validProbe,
+        invalidProbe,
+        assertions: {
+          validExpectedSuccess: Boolean(validProbe.success),
+          invalidExpectedFailure: !invalidProbe.success,
+        },
+      });
+    }
+  }
   const createdAt = new Date().toISOString();
+  const execution = {
+    status: skipped ? "skipped" : "completed",
+    reason: skippedReason || "",
+    migrationDecision,
+  };
   const failedProbes = apiProbeResults.filter(
     (entry) =>
       !entry?.assertions?.validExpectedSuccess ||
@@ -809,6 +1278,24 @@ async function main() {
     apiProbeResults,
     formA11yResults,
   });
+  let preflightFailed = 0;
+  if (preflight.legacyFormsFiles.length > 0 && !migrationPerformed) {
+    preflightFailed = 1;
+    issues.push({
+      type: "preflight",
+      pageUrl: "",
+      formIndex: "",
+      message:
+        "Legacy /src/content/forms detected and migration was declined. Form tests were skipped.",
+    });
+  }
+  const testCases = buildTestCases({
+    frontendProbeResults,
+    apiProbeResults,
+    formA11yResults,
+    preflight,
+    execution,
+  });
 
   const stats = {
     urlsTested: urls.length,
@@ -818,6 +1305,11 @@ async function main() {
       frontendProbeResults.length +
       formA11yResults.length,
     failed: failedProbes + failedFrontendProbes + failedFormA11y,
+    preflightFailed,
+    alerts: preflight.alerts.length,
+    skipped,
+    skippedReason: skippedReason || null,
+    migrationDecision,
     createdAt,
     baseUrl: args.base || null,
     urlsFile: args.urlsFile || null,
@@ -829,23 +1321,30 @@ async function main() {
     frontendProbeResults,
     payloadsPreview,
     apiProbeResults,
+    preflight,
+    execution,
+    testCases,
   });
   writeJson(path.join(reportDir, "issues.json"), issues);
   writeJson(path.join(reportDir, "stats.json"), stats);
   fs.writeFileSync(
     path.join(reportDir, "SUMMARY.md"),
-    `# Form tests report\n\n- Created: ${createdAt}\n- URLs tested: ${stats.urlsTested}\n- Total forms: ${stats.totalForms}\n- Tests run: ${stats.testsRun}\n- Failed: ${stats.failed}\n`,
+    `# Form tests report\n\n- Created: ${createdAt}\n- URLs tested: ${stats.urlsTested}\n- Total forms: ${stats.totalForms}\n- Tests run: ${stats.testsRun}\n- Failed assertions: ${stats.failed}\n- Preflight failures: ${stats.preflightFailed}\n- Alerts: ${stats.alerts}\n- Skipped: ${stats.skipped ? "yes" : "no"}\n- Skip reason: ${stats.skippedReason || "n/a"}\n`,
     "utf8",
   );
   writePlaceholderReport(reportDir, {
     stats,
     issues,
+    preflight,
+    execution,
+    testCases,
     frontendProbeResults,
     apiProbeResults,
     formA11yResults,
   });
 
-  if (stats.failed > 0) {
+  const totalFailed = stats.failed + stats.preflightFailed;
+  if (totalFailed > 0) {
     process.exitCode = 1;
   }
 
@@ -853,10 +1352,28 @@ async function main() {
     console.log(
       `Form test placeholder completed. URLs: ${urls.length}. Report dir: ${reportDir}`,
     );
+    if (preflight.alerts.length > 0) {
+      console.log(`Preflight alerts: ${preflight.alerts.length}`);
+      for (const alert of preflight.alerts) {
+        console.log(`- [${alert.severity}] ${alert.message}`);
+      }
+      for (const recommendation of preflight.recommendations) {
+        console.log(`  Recommendation: ${recommendation}`);
+      }
+    }
     if (process.exitCode === 1) {
-      console.log(`Form test failed: ${stats.failed} assertion failure(s).`);
+      console.log(
+        `Form test failed: ${stats.failed} assertion failure(s), ${stats.preflightFailed} preflight failure(s).`,
+      );
+      if (stats.skippedReason) {
+        console.log(`Form test skipped reason: ${stats.skippedReason}`);
+      }
     } else {
-      console.log("Form test passed.");
+      if (stats.skipped) {
+        console.log(`Form test passed (skipped): ${stats.skippedReason}`);
+      } else {
+        console.log("Form test passed.");
+      }
     }
   }
 }

@@ -330,7 +330,8 @@ function formStatusPill(status) {
     return statusPillHtml(value, "fail");
   }
   if (value === "skipped") return statusPillHtml("skipped", "warn");
-  if (value === "info" || value === "warn") return statusPillHtml(value, "info");
+  if (value === "info" || value === "warn")
+    return statusPillHtml(value, "info");
   return `<span class="muted">-</span>`;
 }
 
@@ -458,12 +459,14 @@ function formDetailsHtml(check = {}) {
 function axePageDetailHtml(page = {}, runBasePath = "", subtitle = "") {
   const violations = Array.isArray(page?.violations) ? page.violations : [];
   const rows = violations
-    .map((entry) => `<tr>
+    .map(
+      (entry) => `<tr>
       <td>${escapeContent(entry?.id || "-")}</td>
       <td>${escapeContent(entry?.impact || "-")}</td>
       <td>${escapeContent(entry?.nodeCount ?? 0)}</td>
       <td><a href="${escapeContent(entry?.helpUrl || "#")}" target="_blank" rel="noreferrer">${escapeContent(entry?.help || "-")}</a></td>
-    </tr>`)
+    </tr>`,
+    )
     .join("");
   return renderLayout({
     title: "aXe page report",

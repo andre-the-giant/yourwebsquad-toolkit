@@ -419,7 +419,13 @@ function listLegacyFormPathReferences(projectRoot = process.cwd()) {
   if (!fs.existsSync(root)) return [];
   const stack = [root];
   const out = [];
-  const skipDirs = new Set(["node_modules", ".git", "build", "reports", "dist"]);
+  const skipDirs = new Set([
+    "node_modules",
+    ".git",
+    "build",
+    "reports",
+    "dist",
+  ]);
   const scanExt = new Set([
     ".js",
     ".mjs",

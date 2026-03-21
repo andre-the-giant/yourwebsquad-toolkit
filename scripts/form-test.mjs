@@ -452,10 +452,19 @@ async function main() {
   );
   writePlaceholderReport(reportDir, stats);
 
+  if (stats.failed > 0) {
+    process.exitCode = 1;
+  }
+
   if (!args.quiet) {
     console.log(
       `Form test placeholder completed. URLs: ${urls.length}. Report dir: ${reportDir}`,
     );
+    if (process.exitCode === 1) {
+      console.log(`Form test failed: ${stats.failed} assertion failure(s).`);
+    } else {
+      console.log("Form test passed.");
+    }
   }
 }
 

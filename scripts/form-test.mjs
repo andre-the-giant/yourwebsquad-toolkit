@@ -137,6 +137,7 @@ function escapeHtml(value) {
 
 function writePlaceholderReport(reportDir, payload = {}) {
   const stats = payload?.stats || {};
+  const issues = Array.isArray(payload?.issues) ? payload.issues : [];
   const frontendProbeResults = Array.isArray(payload?.frontendProbeResults)
     ? payload.frontendProbeResults
     : [];
@@ -155,6 +156,7 @@ function writePlaceholderReport(reportDir, payload = {}) {
   <td>${escapeHtml(item?.success ? "pass" : "fail")}</td>
   <td>${escapeHtml(item?.snapshot?.validation?.requiredCount ?? 0)}</td>
   <td>${escapeHtml(item?.snapshot?.validation?.requiredInvalidCount ?? 0)}</td>
+  <td>${escapeHtml(item?.error || "")}</td>
 </tr>`,
     )
     .join("\n");
@@ -167,6 +169,8 @@ function writePlaceholderReport(reportDir, payload = {}) {
   <td>${escapeHtml(item?.assertions?.validExpectedSuccess ? "pass" : "fail")}</td>
   <td>${escapeHtml(item?.assertions?.invalidExpectedFailure ? "pass" : "fail")}</td>
   <td>${escapeHtml(item?.validProbe?.status ?? "")}/${escapeHtml(item?.invalidProbe?.status ?? "")}</td>
+  <td>${escapeHtml(item?.validProbe?.contentType || "")}</td>
+  <td>${escapeHtml(item?.validProbe?.error || item?.invalidProbe?.error || "")}</td>
 </tr>`,
     )
     .join("\n");
@@ -177,6 +181,17 @@ function writePlaceholderReport(reportDir, payload = {}) {
   <td>${escapeHtml(item?.pageUrl || "")}</td>
   <td>${escapeHtml(item?.violationCount ?? 0)}</td>
   <td>${escapeHtml(item?.success ? "pass" : "fail")}</td>
+  <td>${escapeHtml(item?.outputPath || "")}</td>
+</tr>`,
+    )
+    .join("\n");
+  const issueRows = issues
+    .map(
+      (issue) => `<tr>
+  <td>${escapeHtml(issue?.type || "")}</td>
+  <td>${escapeHtml(issue?.pageUrl || "")}</td>
+  <td>${escapeHtml(issue?.formIndex ?? "")}</td>
+  <td>${escapeHtml(issue?.message || "")}</td>
 </tr>`,
     )
     .join("\n");
@@ -209,25 +224,33 @@ function writePlaceholderReport(reportDir, payload = {}) {
   <h2>Frontend validation probes</h2>
   <table>
     <thead>
-      <tr><th>Page</th><th>Form index</th><th>Status</th><th>Required fields</th><th>Required invalid</th></tr>
+      <tr><th>Page</th><th>Form index</th><th>Status</th><th>Required fields</th><th>Required invalid</th><th>Error</th></tr>
     </thead>
-    <tbody>${frontendRows || '<tr><td colspan="5">No frontend probes.</td></tr>'}</tbody>
+    <tbody>${frontendRows || '<tr><td colspan="6">No frontend probes.</td></tr>'}</tbody>
   </table>
 
   <h2>API probes</h2>
   <table>
     <thead>
-      <tr><th>Page</th><th>Form index</th><th>Valid probe</th><th>Invalid probe</th><th>Status codes</th></tr>
+      <tr><th>Page</th><th>Form index</th><th>Valid probe</th><th>Invalid probe</th><th>Status codes</th><th>Content-Type</th><th>Error</th></tr>
     </thead>
-    <tbody>${apiRows || '<tr><td colspan="5">No API probes.</td></tr>'}</tbody>
+    <tbody>${apiRows || '<tr><td colspan="7">No API probes.</td></tr>'}</tbody>
   </table>
 
   <h2>Form accessibility (aXe)</h2>
   <table>
     <thead>
-      <tr><th>Page</th><th>Violations</th><th>Status</th></tr>
+      <tr><th>Page</th><th>Violations</th><th>Status</th><th>Artifact</th></tr>
     </thead>
-    <tbody>${a11yRows || '<tr><td colspan="3">No form a11y probes.</td></tr>'}</tbody>
+    <tbody>${a11yRows || '<tr><td colspan="4">No form a11y probes.</td></tr>'}</tbody>
+  </table>
+
+  <h2>Failure details</h2>
+  <table>
+    <thead>
+      <tr><th>Type</th><th>Page</th><th>Form index</th><th>Message</th></tr>
+    </thead>
+    <tbody>${issueRows || '<tr><td colspan="4">No failures.</td></tr>'}</tbody>
   </table>
 </body>
 </html>`;
@@ -273,6 +296,14 @@ async function discoverForms(urls = [], { quiet = false } = {}) {
       const id = form.getAttribute("id") || "";
       const name = form.getAttribute("name") || "";
       const inputs = form.querySelectorAll("input,select,textarea");
+      const isApiBacked =
+        Boolean(actionUrl) &&
+        /\/api\//i.test(actionUrl) &&
+        /^(post|get)$/i.test(method);
+
+      if (!isApiBacked) {
+        continue;
+      }
       const fields = inputs
         .map((input) => {
           const tagName = String(input.tagName || "").toLowerCase();
@@ -400,6 +431,10 @@ async function runApiProbe(
     }
 
     const response = await fetch(target, options);
+    const contentType = (response.headers.get("content-type") || "")
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
     const text = await response.text();
     let json = null;
     try {
@@ -408,7 +443,9 @@ async function runApiProbe(
       json = null;
     }
 
-    const success = response.ok && json?.ok !== false;
+    const isJson = contentType === "application/json";
+    const hasBooleanOk = json && typeof json.ok === "boolean";
+    const success = response.ok && isJson && hasBooleanOk && json.ok === true;
     return {
       pageUrl: form?.pageUrl || "",
       formIndex: Number(form?.formIndex || 0),
@@ -417,6 +454,7 @@ async function runApiProbe(
       attempted: true,
       success,
       status: response.status,
+      contentType,
       ok: response.ok,
       responseJson: json,
       responseText: json ? null : text.slice(0, 2000),
@@ -640,6 +678,48 @@ async function runFormA11yProbes(
   return results;
 }
 
+function buildIssues({
+  frontendProbeResults = [],
+  apiProbeResults = [],
+  formA11yResults = [],
+} = {}) {
+  const issues = [];
+
+  for (const entry of frontendProbeResults) {
+    if (entry?.success) continue;
+    issues.push({
+      type: "frontend",
+      pageUrl: entry?.pageUrl || "",
+      formIndex: entry?.formIndex ?? "",
+      message: entry?.error || "Frontend probe failed.",
+    });
+  }
+
+  for (const entry of apiProbeResults) {
+    const validOk = Boolean(entry?.assertions?.validExpectedSuccess);
+    const invalidOk = Boolean(entry?.assertions?.invalidExpectedFailure);
+    if (validOk && invalidOk) continue;
+    issues.push({
+      type: "api",
+      pageUrl: entry?.pageUrl || "",
+      formIndex: entry?.formIndex ?? "",
+      message: `Assertion failure (validExpectedSuccess=${validOk}, invalidExpectedFailure=${invalidOk}).`,
+    });
+  }
+
+  for (const entry of formA11yResults) {
+    if (entry?.success) continue;
+    issues.push({
+      type: "a11y",
+      pageUrl: entry?.pageUrl || "",
+      formIndex: "",
+      message: `aXe violation count: ${Number(entry?.violationCount || 0)}`,
+    });
+  }
+
+  return issues;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const reportDir = prepareReportDir(args.reportDir);
@@ -724,6 +804,11 @@ async function main() {
   const failedFormA11y = formA11yResults.filter(
     (entry) => !entry?.success,
   ).length;
+  const issues = buildIssues({
+    frontendProbeResults,
+    apiProbeResults,
+    formA11yResults,
+  });
 
   const stats = {
     urlsTested: urls.length,
@@ -745,15 +830,16 @@ async function main() {
     payloadsPreview,
     apiProbeResults,
   });
-  writeJson(path.join(reportDir, "issues.json"), []);
+  writeJson(path.join(reportDir, "issues.json"), issues);
   writeJson(path.join(reportDir, "stats.json"), stats);
   fs.writeFileSync(
     path.join(reportDir, "SUMMARY.md"),
-    `# Form tests report\n\n- Created: ${createdAt}\n- URLs tested: ${urls.length}\n- Total forms: ${forms.length}\n- Tests run: ${apiProbeResults.length}\n- Failed: ${failedProbes}\n`,
+    `# Form tests report\n\n- Created: ${createdAt}\n- URLs tested: ${stats.urlsTested}\n- Total forms: ${stats.totalForms}\n- Tests run: ${stats.testsRun}\n- Failed: ${stats.failed}\n`,
     "utf8",
   );
   writePlaceholderReport(reportDir, {
     stats,
+    issues,
     frontendProbeResults,
     apiProbeResults,
     formA11yResults,

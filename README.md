@@ -43,7 +43,7 @@ Available commands:
   - Cleans current workspace by removing: `.lighthouseci`, `build`, `reports`, `.astro`, `node_modules`, `package-lock.json`.
 - `yws-toolkit scaffold newpage`
   - Interactive page generator. Single-locale projects scaffold root non-segment routes; multilingual projects scaffold localized segment or non-segment routes.
-- `yws-toolkit quality <run|a11y|seo|links|jsonld|security|sitespeed|comment|render|compare|list-runs|delete-run|clean-runs|flush-runs|prune-runs> [-- <args>]`
+- `yws-toolkit quality <run|a11y|axe|form|seo|links|jsonld|security|sitespeed|comment|render|compare|list-runs|delete-run|clean-runs|flush-runs|prune-runs> [-- <args>]`
   - Runs quality checks from the current project directory.
 - `yws-toolkit update <components|toolkit> [-- <args>]`
   - Interactive tag-based dependency updater for:
@@ -60,6 +60,8 @@ Available commands:
     "jsonld:check": "yws-toolkit quality jsonld",
     "test": "yws-toolkit quality run",
     "test:a11y": "yws-toolkit quality a11y",
+    "test:axe": "yws-toolkit quality axe",
+    "test:form": "yws-toolkit quality form",
     "test:seo": "yws-toolkit quality seo",
     "test:links": "yws-toolkit quality links",
     "test:security": "yws-toolkit quality security",

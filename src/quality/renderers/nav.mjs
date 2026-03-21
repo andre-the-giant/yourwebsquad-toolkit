@@ -17,6 +17,8 @@ export function reportNavLinks({ basePath = "", selectedChecks = [] } = {}) {
       href: joinBase(basePath, "lighthouse/index.html"),
     },
     { key: "pa11y", label: "Pa11y", href: joinBase(basePath, "pa11y.html") },
+    { key: "axe", label: "aXe", href: joinBase(basePath, "axe.html") },
+    { key: "form", label: "Form tests", href: joinBase(basePath, "form.html") },
     { key: "seo", label: "SEO", href: joinBase(basePath, "seo.html") },
     {
       key: "links",

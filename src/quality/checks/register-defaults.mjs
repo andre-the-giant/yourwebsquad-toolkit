@@ -2,6 +2,8 @@ import { jsonldCheck } from "./jsonld/index.mjs";
 import { lighthouseCheck } from "./lighthouse/index.mjs";
 import { linksCheck } from "./links/index.mjs";
 import { pa11yCheck } from "./pa11y/index.mjs";
+import { axeCheck } from "./axe/index.mjs";
+import { formCheck } from "./form/index.mjs";
 import { securityCheck } from "./security/index.mjs";
 import { seoCheck } from "./seo/index.mjs";
 import { sitespeedCheck } from "./sitespeed/index.mjs";
@@ -16,6 +18,8 @@ import {
 const DEFAULT_CHECKS = [
   lighthouseCheck,
   pa11yCheck,
+  axeCheck,
+  formCheck,
   seoCheck,
   linksCheck,
   jsonldCheck,

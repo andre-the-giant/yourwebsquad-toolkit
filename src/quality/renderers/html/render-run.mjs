@@ -12,6 +12,8 @@ import {
 const KNOWN_CHECKS = new Set([
   "lighthouse",
   "pa11y",
+  "axe",
+  "form",
   "seo",
   "links",
   "jsonld",
@@ -798,6 +800,22 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
         );
       }
     }
+    if (checkId === "axe") {
+      if (check?.meta?.reportHtmlPath) {
+        copyFileIfExists(
+          check.meta.reportHtmlPath,
+          path.join(outDir, "axe", "report.html"),
+        );
+      }
+    }
+    if (checkId === "form") {
+      if (check?.meta?.reportHtmlPath) {
+        copyFileIfExists(
+          check.meta.reportHtmlPath,
+          path.join(outDir, "form", "report.html"),
+        );
+      }
+    }
     if (checkId === "seo") {
       if (check?.meta?.reportHtmlPath) {
         copyFileIfExists(
@@ -885,6 +903,10 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
       bodyHtml:
         checkId === "pa11y"
           ? pa11yDetailsHtml(check)
+          : checkId === "axe"
+            ? pa11yDetailsHtml(check)
+          : checkId === "form"
+            ? checkDetailsHtml(checkId, check)
           : checkId === "seo"
             ? seoDetailsHtml(check)
             : checkId === "links"

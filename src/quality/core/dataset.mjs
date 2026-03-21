@@ -3,6 +3,10 @@ import { collectLighthouseFromReportDir } from "../checks/lighthouse/collect.mjs
 import { normalizeLighthousePayload } from "../checks/lighthouse/normalize.mjs";
 import { collectPa11yFromReportDir } from "../checks/pa11y/collect.mjs";
 import { normalizePa11yPayload } from "../checks/pa11y/normalize.mjs";
+import { collectAxeFromReportDir } from "../checks/axe/collect.mjs";
+import { normalizeAxePayload } from "../checks/axe/normalize.mjs";
+import { collectFormFromReportDir } from "../checks/form/collect.mjs";
+import { normalizeFormPayload } from "../checks/form/normalize.mjs";
 import { collectSeoFromReportDir } from "../checks/seo/collect.mjs";
 import { normalizeSeoPayload } from "../checks/seo/normalize.mjs";
 import { collectLinksFromReportDir } from "../checks/links/collect.mjs";
@@ -19,6 +23,8 @@ import { normalizeVnuPayload } from "../checks/vnu/normalize.mjs";
 const CHECK_KEYS = [
   "lighthouse",
   "pa11y",
+  "axe",
+  "form",
   "seo",
   "links",
   "jsonld",
@@ -36,6 +42,8 @@ function checkFailedMap(failures = []) {
   return {
     lighthouse: failedSet.has("Lighthouse"),
     pa11y: failedSet.has("Pa11y"),
+    axe: failedSet.has("aXe"),
+    form: failedSet.has("Form tests"),
     seo: failedSet.has("SEO audit"),
     links: failedSet.has("Link check"),
     jsonld: failedSet.has("JSON-LD validation"),
@@ -77,6 +85,24 @@ export function buildCanonicalDataset({
     checks.pa11y = normalizePa11yPayload(raw, {
       selected: true,
       failed: failed.pa11y,
+    });
+  }
+  if (selectedChecks?.axe) {
+    const raw = collectAxeFromReportDir(path.join(reportRoot, "axe"), {
+      logPath: path.join(logRoot, "axe.log"),
+    });
+    checks.axe = normalizeAxePayload(raw, {
+      selected: true,
+      failed: failed.axe,
+    });
+  }
+  if (selectedChecks?.form) {
+    const raw = collectFormFromReportDir(path.join(reportRoot, "form"), {
+      logPath: path.join(logRoot, "form.log"),
+    });
+    checks.form = normalizeFormPayload(raw, {
+      selected: true,
+      failed: failed.form,
     });
   }
   if (selectedChecks?.seo) {

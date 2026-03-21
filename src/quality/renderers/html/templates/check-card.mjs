@@ -9,6 +9,8 @@ function friendlyCheckName(checkId) {
   const map = {
     lighthouse: "Lighthouse",
     pa11y: "Accessibility (Pa11y)",
+    axe: "Accessibility (aXe)",
+    form: "Form tests",
     seo: "SEO",
     links: "Link Check",
     jsonld: "JSON-LD",
@@ -28,6 +30,10 @@ function statusForCheck(checkId, check = {}) {
       return { label: "Issues found", tone: "fail" };
     if (checkId === "vnu")
       return { label: "Markup errors found", tone: "fail" };
+    if (checkId === "axe")
+      return { label: "Accessibility issues found", tone: "fail" };
+    if (checkId === "form")
+      return { label: "Form issues found", tone: "fail" };
     return { label: "Needs attention", tone: "fail" };
   }
   const warningCount = asNumber(stats.warningCount);

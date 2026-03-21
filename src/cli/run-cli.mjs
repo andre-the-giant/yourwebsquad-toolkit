@@ -17,6 +17,8 @@ const COMMANDS = {
   quality: {
     run: "scripts/run-quality-suite.mjs",
     a11y: "scripts/pa11y-crawl-and-test.mjs",
+    axe: "scripts/axe-audit.mjs",
+    form: "scripts/form-test.mjs",
     seo: "scripts/seo-audit.mjs",
     links: "scripts/link-check.mjs",
     jsonld: "scripts/jsonld-validate.mjs",
@@ -43,7 +45,7 @@ function printHelp() {
   console.log("  yws-toolkit format [--check] [-- <prettier args>]");
   console.log("  yws-toolkit scaffold <newpage> [-- <args>]");
   console.log(
-    "  yws-toolkit quality <run|a11y|seo|links|jsonld|security|sitespeed|comment|render|compare|list-runs|delete-run|clean-runs|flush-runs|prune-runs> [-- <args>]",
+    "  yws-toolkit quality <run|a11y|axe|form|seo|links|jsonld|security|sitespeed|comment|render|compare|list-runs|delete-run|clean-runs|flush-runs|prune-runs> [-- <args>]",
   );
   console.log("  yws-toolkit update <components|toolkit> [-- <args>]");
 }

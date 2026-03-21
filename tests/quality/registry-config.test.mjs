@@ -47,14 +47,16 @@ test("quality config loads and normalizes check settings", async () => {
     JSON.stringify(
       {
         checks: {
-          enabled: ["seo", "links", "invalid"],
+          enabled: ["axe", "form", "seo", "links", "invalid"],
           disabled: ["links"],
-          order: ["links", "seo"],
+          order: ["form", "axe", "links", "seo"],
           thresholds: {
+            form: { failed: 0 },
             seo: { errorCount: 0, warningCount: 3 },
             invalid: { foo: 1 },
           },
           options: {
+            form: { includeUploads: true },
             seo: { strict: true },
             invalid: { foo: "bar" },
           },
@@ -68,13 +70,15 @@ test("quality config loads and normalizes check settings", async () => {
 
   const config = await loadQualityConfig(cwd);
   assert.equal(config.path, configPath);
-  assert.deepEqual(config.checks.enabled, ["seo", "links"]);
+  assert.deepEqual(config.checks.enabled, ["axe", "form", "seo", "links"]);
   assert.deepEqual(config.checks.disabled, ["links"]);
-  assert.deepEqual(config.checks.order, ["links", "seo"]);
+  assert.deepEqual(config.checks.order, ["form", "axe", "links", "seo"]);
+  assert.deepEqual(config.checks.thresholds.form, { failed: 0 });
   assert.deepEqual(config.checks.thresholds.seo, {
     errorCount: 0,
     warningCount: 3,
   });
+  assert.deepEqual(config.checks.options.form, { includeUploads: true });
   assert.deepEqual(config.checks.options.seo, { strict: true });
 });
 
@@ -82,6 +86,7 @@ test("quality config selection and ordering are applied", () => {
   const selection = {
     lighthouse: true,
     pa11y: true,
+    axe: true,
     seo: true,
     links: true,
     jsonld: true,
@@ -97,6 +102,7 @@ test("quality config selection and ordering are applied", () => {
   const availability = {
     lighthouse: { enabled: true },
     pa11y: { enabled: true },
+    axe: { enabled: true },
     seo: { enabled: true },
     links: { enabled: true },
     jsonld: { enabled: false },

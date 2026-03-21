@@ -5,6 +5,8 @@ import { pathToFileURL } from "node:url";
 const CHECK_IDS = [
   "lighthouse",
   "pa11y",
+  "axe",
+  "form",
   "seo",
   "links",
   "jsonld",

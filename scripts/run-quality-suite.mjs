@@ -32,6 +32,12 @@ import { summarizeLighthousePayload } from "../src/quality/checks/lighthouse/sum
 import { collectPa11yFromReportDir } from "../src/quality/checks/pa11y/collect.mjs";
 import { normalizePa11yPayload } from "../src/quality/checks/pa11y/normalize.mjs";
 import { summarizePa11yPayload } from "../src/quality/checks/pa11y/summarize.mjs";
+import { collectAxeFromReportDir } from "../src/quality/checks/axe/collect.mjs";
+import { normalizeAxePayload } from "../src/quality/checks/axe/normalize.mjs";
+import { summarizeAxePayload } from "../src/quality/checks/axe/summarize.mjs";
+import { collectFormFromReportDir } from "../src/quality/checks/form/collect.mjs";
+import { normalizeFormPayload } from "../src/quality/checks/form/normalize.mjs";
+import { summarizeFormPayload } from "../src/quality/checks/form/summarize.mjs";
 import { collectSeoFromReportDir } from "../src/quality/checks/seo/collect.mjs";
 import { normalizeSeoPayload } from "../src/quality/checks/seo/normalize.mjs";
 import { summarizeSeoPayload } from "../src/quality/checks/seo/summarize.mjs";
@@ -143,6 +149,8 @@ function openInBrowser(url) {
 const CHECK_KEYS = [
   "lighthouse",
   "pa11y",
+  "axe",
+  "form",
   "seo",
   "links",
   "jsonld",
@@ -153,6 +161,8 @@ const CHECK_KEYS = [
 const CHECK_NAME_BY_ID = {
   lighthouse: "Lighthouse",
   pa11y: "Pa11y",
+  axe: "aXe",
+  form: "Form tests",
   seo: "SEO audit",
   links: "Link check",
   jsonld: "JSON-LD validation",
@@ -172,6 +182,8 @@ function checksToFlags(selectedValues = []) {
     label: enabledNames.length ? enabledNames.join(", ") : "none",
     lighthouse: selectedSet.has("lighthouse"),
     pa11y: selectedSet.has("pa11y"),
+    axe: selectedSet.has("axe"),
+    form: selectedSet.has("form"),
     seo: selectedSet.has("seo"),
     links: selectedSet.has("links"),
     jsonld: selectedSet.has("jsonld"),
@@ -190,6 +202,8 @@ function buildCheckAvailability(selectedTarget) {
   return {
     lighthouse: { enabled: true },
     pa11y: { enabled: true },
+    axe: { enabled: true },
+    form: { enabled: true },
     seo: { enabled: true },
     links: { enabled: true },
     jsonld: { enabled: true },
@@ -401,6 +415,8 @@ function collectRawSources() {
       name: ".",
     },
     { checkId: "pa11y", path: path.join(REPORT_ROOT, "pa11y"), name: "pa11y" },
+    { checkId: "axe", path: path.join(REPORT_ROOT, "axe"), name: "axe" },
+    { checkId: "form", path: path.join(REPORT_ROOT, "form"), name: "form" },
     { checkId: "seo", path: path.join(REPORT_ROOT, "seo"), name: "seo" },
     { checkId: "links", path: path.join(REPORT_ROOT, "links"), name: "links" },
     {
@@ -698,6 +714,8 @@ function ensureCleanReports() {
     "logs",
     "lighthouse",
     "pa11y",
+    "axe",
+    "form",
     "seo",
     "links",
     "jsonld",
@@ -1295,6 +1313,66 @@ async function main() {
         failed: Boolean(result?.exitCode && result.exitCode !== 0),
       });
       return summarizePa11yPayload(normalized);
+    };
+
+    checkRunners.axe = async () => {
+      const result = await runCommand(
+        "node",
+        [
+          toolkitScriptPath("axe-audit.mjs"),
+          "--base",
+          baseUrl,
+          "--urls-file",
+          urlsFile,
+          "--report-dir",
+          path.join(REPORT_ROOT, "axe"),
+          QUIET_MODE ? "--quiet" : "",
+        ].filter(Boolean),
+        {
+          label: "aXe",
+          logName: "axe",
+          allowFailure: true,
+          forceLog: true,
+        },
+      );
+      const raw = collectAxeFromReportDir(path.join(REPORT_ROOT, "axe"), {
+        logPath: result?.logPath,
+      });
+      const normalized = normalizeAxePayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      return summarizeAxePayload(normalized);
+    };
+
+    checkRunners.form = async () => {
+      const result = await runCommand(
+        "node",
+        [
+          toolkitScriptPath("form-test.mjs"),
+          "--base",
+          baseUrl,
+          "--urls-file",
+          urlsFile,
+          "--report-dir",
+          path.join(REPORT_ROOT, "form"),
+          QUIET_MODE ? "--quiet" : "",
+        ].filter(Boolean),
+        {
+          label: "Form tests",
+          logName: "form",
+          allowFailure: true,
+          forceLog: true,
+        },
+      );
+      const raw = collectFormFromReportDir(path.join(REPORT_ROOT, "form"), {
+        logPath: result?.logPath,
+      });
+      const normalized = normalizeFormPayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      return summarizeFormPayload(normalized);
     };
 
     checkRunners.seo = async () => {

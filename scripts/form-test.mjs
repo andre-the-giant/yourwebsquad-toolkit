@@ -36,6 +36,16 @@ function parseArgs(argv = []) {
       continue;
     }
 
+    if ((arg === "--all-urls-file" || arg === "-U") && argv[i + 1]) {
+      options.allUrlsFile = argv[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("--all-urls-file=")) {
+      options.allUrlsFile = arg.slice("--all-urls-file=".length);
+      continue;
+    }
+
     if ((arg === "--report-dir" || arg === "-o") && argv[i + 1]) {
       options.reportDir = argv[i + 1];
       i += 1;
@@ -218,8 +228,90 @@ function detectFormSourceLayout(projectRoot = process.cwd()) {
   };
 }
 
+function resolveFormsBaseDirFromContentConfig(projectRoot = process.cwd()) {
+  const configPath = path.join(projectRoot, "src", "content.config.ts");
+  const fallback = path.join(projectRoot, "src", "forms");
+  if (!fs.existsSync(configPath)) {
+    return {
+      configPath,
+      formsBaseDir: fallback,
+      fromConfig: false,
+      missingConfig: true,
+      reason: "content.config.ts not found; using /src/forms fallback.",
+    };
+  }
+
+  try {
+    const source = fs.readFileSync(configPath, "utf8");
+    const matches = Array.from(
+      source.matchAll(/base\s*:\s*["']([^"']*forms[^"']*)["']/gi),
+    );
+    const candidate = matches.length > 0 ? String(matches[0][1] || "") : "";
+    if (!candidate) {
+      return {
+        configPath,
+        formsBaseDir: fallback,
+        fromConfig: false,
+        missingConfig: false,
+        reason:
+          "No forms base found in content.config.ts; using /src/forms fallback.",
+      };
+    }
+    return {
+      configPath,
+      formsBaseDir: path.resolve(projectRoot, candidate),
+      fromConfig: true,
+      missingConfig: false,
+      reason: `Using forms base from content.config.ts: ${candidate}`,
+    };
+  } catch (error) {
+    return {
+      configPath,
+      formsBaseDir: fallback,
+      fromConfig: false,
+      missingConfig: false,
+      reason: `Could not parse content.config.ts; using /src/forms fallback (${error?.message || error}).`,
+    };
+  }
+}
+
+function parseFormIdFromFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  let text = "";
+  try {
+    text = fs.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+  if (ext === ".json") {
+    try {
+      const parsed = JSON.parse(text);
+      const id = String(parsed?.id || "").trim();
+      return id || null;
+    } catch {
+      return null;
+    }
+  }
+  const yamlMatch = text.match(/^\s*id\s*:\s*["']?([^"'\n\r]+)["']?\s*$/im);
+  return yamlMatch ? String(yamlMatch[1] || "").trim() || null : null;
+}
+
+function extractFormIds(formsBaseDir) {
+  const files = listFormDefinitionFiles(formsBaseDir);
+  const ids = new Set();
+  for (const file of files) {
+    const id = parseFormIdFromFile(file);
+    if (id) ids.add(id);
+  }
+  return {
+    formsBaseDir,
+    fileCount: files.length,
+    formIds: Array.from(ids).sort(),
+  };
+}
+
 async function askYesNo(message, { quiet = false } = {}) {
-  if (quiet || !process.stdin.isTTY || !process.stdout.isTTY) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
     return null;
   }
 
@@ -302,6 +394,74 @@ function migrateLegacyFormsLayout(layout = {}) {
   maybeRemoveDirIfEmpty(srcContentDir);
 
   return { movedFiles: sourceFiles.length, mode: "merge" };
+}
+
+function migrateContentConfigFormsBase(projectRoot = process.cwd()) {
+  const configPath = path.join(projectRoot, "src", "content.config.ts");
+  if (!fs.existsSync(configPath)) {
+    return { exists: false, updated: false, stillLegacy: false };
+  }
+
+  const original = fs.readFileSync(configPath, "utf8");
+  const next = original.replaceAll("src/content/forms", "src/forms");
+  if (next !== original) {
+    fs.writeFileSync(configPath, next, "utf8");
+  }
+  return {
+    exists: true,
+    updated: next !== original,
+    stillLegacy: next.includes("src/content/forms"),
+  };
+}
+
+function listLegacyFormPathReferences(projectRoot = process.cwd()) {
+  const root = path.join(projectRoot, "src");
+  if (!fs.existsSync(root)) return [];
+  const stack = [root];
+  const out = [];
+  const skipDirs = new Set(["node_modules", ".git", "build", "reports", "dist"]);
+  const scanExt = new Set([
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".astro",
+    ".json",
+    ".yml",
+    ".yaml",
+    ".md",
+    ".mdx",
+    ".php",
+  ]);
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (skipDirs.has(entry.name)) continue;
+        stack.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!scanExt.has(path.extname(entry.name).toLowerCase())) continue;
+      let text = "";
+      try {
+        text = fs.readFileSync(fullPath, "utf8");
+      } catch {
+        continue;
+      }
+      if (text.includes("src/content/forms")) {
+        out.push(path.relative(projectRoot, fullPath));
+      }
+    }
+  }
+
+  out.sort();
+  return out;
 }
 
 function writePlaceholderReport(reportDir, payload = {}) {
@@ -517,8 +677,16 @@ function writePlaceholderReport(reportDir, payload = {}) {
   fs.writeFileSync(path.join(reportDir, "report.html"), html, "utf8");
 }
 
-async function discoverForms(urls = [], { quiet = false } = {}) {
+async function discoverForms(
+  urls = [],
+  { quiet = false, formIdAllowlist = [] } = {},
+) {
   const discovered = [];
+  const allowedIds = new Set(
+    (Array.isArray(formIdAllowlist) ? formIdAllowlist : [])
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean),
+  );
 
   for (const url of urls) {
     let html = "";
@@ -563,6 +731,11 @@ async function discoverForms(urls = [], { quiet = false } = {}) {
 
       if (!isApiBacked) {
         continue;
+      }
+      if (allowedIds.size > 0) {
+        if (!id || !allowedIds.has(id)) {
+          continue;
+        }
       }
       const fields = inputs
         .map((input) => {
@@ -1128,7 +1301,31 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const reportDir = prepareReportDir(args.reportDir);
   const urls = loadUrlsFromFile(args.urlsFile);
+  const allUrls = args.allUrlsFile ? loadUrlsFromFile(args.allUrlsFile) : [];
+  const discoveryUrls = allUrls.length > 0 ? allUrls : urls;
   let preflight = detectFormSourceLayout(process.cwd());
+  const formsConfig = resolveFormsBaseDirFromContentConfig(process.cwd());
+  const formsCatalog = extractFormIds(formsConfig.formsBaseDir);
+  if (formsConfig.reason) {
+    preflight.notices.push({
+      type: "forms-config-source",
+      severity: "info",
+      message: formsConfig.reason,
+    });
+  }
+  preflight.notices.push({
+    type: "forms-catalog",
+    severity: "info",
+    message: `Loaded ${formsCatalog.formIds.length} form id(s) from ${formsCatalog.fileCount} definition file(s).`,
+  });
+  if (formsConfig.missingConfig) {
+    preflight.alerts.push({
+      type: "missing-content-config",
+      severity: "warning",
+      message:
+        "Missing src/content.config.ts. Form tests require this file for Astro v6 projects.",
+    });
+  }
   const quiet = Boolean(args.quiet);
   let migrationDecision = "not-needed";
   let migrationPerformed = false;
@@ -1164,6 +1361,44 @@ async function main() {
         severity: "info",
         message: `Migrated ${migration.movedFiles} file(s) from /src/content/forms to /src/forms.`,
       });
+      const configMigration = migrateContentConfigFormsBase(process.cwd());
+      if (configMigration.exists) {
+        preflight.notices.push({
+          type: "content-config-migrated",
+          severity: "info",
+          message: configMigration.updated
+            ? "Updated src/content.config.ts forms base to /src/forms."
+            : "src/content.config.ts already points to /src/forms.",
+        });
+      } else {
+        preflight.notices.push({
+          type: "content-config-missing",
+          severity: "info",
+          message:
+            "src/content.config.ts not found during migration safety checks.",
+        });
+      }
+      const legacyRefs = listLegacyFormPathReferences(process.cwd());
+      if (legacyRefs.length > 0 || configMigration.stillLegacy) {
+        preflight.alerts.push({
+          type: "legacy-forms-references-remain",
+          severity: "warning",
+          message: `Legacy forms path references remain after migration (${legacyRefs.length} file(s)).`,
+        });
+        preflight.recommendations.push(
+          "Update remaining src/content/forms references to src/forms before running form tests.",
+        );
+        if (legacyRefs.length > 0) {
+          preflight.notices.push({
+            type: "legacy-forms-reference-files",
+            severity: "info",
+            message: `Files with remaining legacy references: ${legacyRefs.slice(0, 10).join(", ")}${legacyRefs.length > 10 ? " ..." : ""}`,
+          });
+        }
+        skipped = true;
+        skippedReason =
+          "Migration completed but legacy /src/content/forms references still exist. Form tests skipped.";
+      }
     } else {
       skipped = true;
       skippedReason =
@@ -1177,11 +1412,36 @@ async function main() {
   const apiProbeResults = [];
   let payloadsPreview = [];
 
+  if (!skipped && formsCatalog.fileCount === 0) {
+    skipped = true;
+    skippedReason = `No form definitions found in ${formsCatalog.formsBaseDir}.`;
+    preflight.notices.push({
+      type: "no-form-definitions",
+      severity: "info",
+      message: skippedReason,
+    });
+  }
+
+  if (!skipped && formsCatalog.formIds.length === 0) {
+    skipped = true;
+    skippedReason =
+      "Form definitions exist, but no form IDs were found in definition files.";
+    preflight.notices.push({
+      type: "no-form-ids-in-definitions",
+      severity: "info",
+      message: skippedReason,
+    });
+  }
+
   if (!skipped) {
-    forms = await discoverForms(urls, { quiet });
+    forms = await discoverForms(discoveryUrls, {
+      quiet,
+      formIdAllowlist: formsCatalog.formIds,
+    });
     if (forms.length === 0) {
       skipped = true;
-      skippedReason = "No generated form has been detected on tested URLs.";
+      skippedReason =
+        "Form definitions were found, but no pages embedding those form IDs were detected on discovered sitemap URLs.";
       preflight.notices.push({
         type: "no-generated-forms-detected",
         severity: "info",
@@ -1284,13 +1544,39 @@ async function main() {
   });
   let preflightFailed = 0;
   if (preflight.legacyFormsFiles.length > 0 && !migrationPerformed) {
-    preflightFailed = 1;
+    preflightFailed += 1;
     issues.push({
       type: "preflight",
       pageUrl: "",
       formIndex: "",
       message:
         "Legacy /src/content/forms detected and migration was declined. Form tests were skipped.",
+    });
+  }
+  const lingeringLegacyRefs = preflight.alerts.filter(
+    (entry) => entry?.type === "legacy-forms-references-remain",
+  ).length;
+  if (lingeringLegacyRefs > 0) {
+    preflightFailed += lingeringLegacyRefs;
+    issues.push({
+      type: "preflight",
+      pageUrl: "",
+      formIndex: "",
+      message:
+        "Migration safety check failed: legacy /src/content/forms references remain.",
+    });
+  }
+  const missingConfigFailures = preflight.alerts.filter(
+    (entry) => entry?.type === "missing-content-config",
+  ).length;
+  if (missingConfigFailures > 0) {
+    preflightFailed += missingConfigFailures;
+    issues.push({
+      type: "preflight",
+      pageUrl: "",
+      formIndex: "",
+      message:
+        "Preflight failed: src/content.config.ts is required for Astro v6 form discovery.",
     });
   }
   const testCases = buildTestCases({
@@ -1302,7 +1588,7 @@ async function main() {
   });
 
   const stats = {
-    urlsTested: urls.length,
+    urlsTested: discoveryUrls.length,
     totalForms: forms.length,
     testsRun:
       apiProbeResults.length * 2 +
@@ -1317,6 +1603,13 @@ async function main() {
     createdAt,
     baseUrl: args.base || null,
     urlsFile: args.urlsFile || null,
+    allUrlsFile: args.allUrlsFile || null,
+    allUrlsCount: allUrls.length,
+    discoveryUrlsCount: discoveryUrls.length,
+    formsConfigPath: formsConfig.configPath,
+    formsBaseDir: formsCatalog.formsBaseDir,
+    formsDefinitionCount: formsCatalog.fileCount,
+    formsCatalogCount: formsCatalog.formIds.length,
   };
 
   writeJson(path.join(reportDir, "results.json"), {
@@ -1328,6 +1621,8 @@ async function main() {
     preflight,
     execution,
     testCases,
+    formsCatalog,
+    formsConfig,
   });
   writeJson(path.join(reportDir, "issues.json"), issues);
   writeJson(path.join(reportDir, "stats.json"), stats);
@@ -1354,7 +1649,7 @@ async function main() {
 
   if (!args.quiet) {
     console.log(
-      `Form test placeholder completed. URLs: ${urls.length}. Report dir: ${reportDir}`,
+      `Form test placeholder completed. URLs: ${discoveryUrls.length}. Report dir: ${reportDir}`,
     );
     if (preflight.alerts.length > 0) {
       console.log(`Preflight alerts: ${preflight.alerts.length}`);

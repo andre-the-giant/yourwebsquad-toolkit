@@ -408,6 +408,7 @@ function collectRawSources() {
       path: path.join(REPORT_ROOT, "urls.json"),
       name: "urls.json",
     },
+    { checkId: "suite", path: path.join(REPORT_ROOT, "suite"), name: "suite" },
     { checkId: "suite", path: path.join(REPORT_ROOT, "logs"), name: "logs" },
     {
       checkId: "lighthouse",
@@ -711,6 +712,7 @@ function ensureCleanReports() {
   for (const target of [
     "index.html",
     "urls.json",
+    "suite",
     "logs",
     "lighthouse",
     "pa11y",
@@ -1037,8 +1039,8 @@ async function crawlAllPages(startUrl) {
   return Array.from(visited).sort();
 }
 
-function writeUrlList(urls) {
-  const file = path.join(REPORT_ROOT, "urls.json");
+function writeUrlList(urls, { relativePath = "urls.json" } = {}) {
+  const file = path.join(REPORT_ROOT, relativePath);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(urls, null, 2), "utf8");
   return file;
@@ -1234,6 +1236,9 @@ async function main() {
       );
     }
 
+    const allUrlsFile = writeUrlList(urls, {
+      relativePath: path.join("suite", "sitemap-urls.json"),
+    });
     const urlsFile = writeUrlList(selectedUrls);
 
     const checkRunners = {};
@@ -1354,6 +1359,8 @@ async function main() {
           baseUrl,
           "--urls-file",
           urlsFile,
+          "--all-urls-file",
+          allUrlsFile,
           "--report-dir",
           path.join(REPORT_ROOT, "form"),
           QUIET_MODE ? "--quiet" : "",

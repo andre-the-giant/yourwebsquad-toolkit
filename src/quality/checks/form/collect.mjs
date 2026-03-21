@@ -21,7 +21,10 @@ export function collectFormFromReportDir(reportDir, options = {}) {
     reportDir,
     logPath: options.logPath || null,
     stats,
-    results: Array.isArray(results) ? results : [],
+    results:
+      results && typeof results === "object" && !Array.isArray(results)
+        ? results
+        : {},
     issues: Array.isArray(issues) ? issues : [],
     reportHtmlPath: fs.existsSync(reportHtml) ? reportHtml : null,
     summaryMdPath: fs.existsSync(summaryMd) ? summaryMd : null,

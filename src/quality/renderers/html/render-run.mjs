@@ -265,6 +265,233 @@ function pa11yDetailsHtml(check = {}) {
   </section>`;
 }
 
+function axeOverviewPillsHtml(stats = {}) {
+  const selected = {
+    pagesTested: stats?.pagesTested,
+    failedPages: stats?.failedPages,
+    violationCount: stats?.violationCount,
+  };
+  return overviewPillsHtml(selected, { excludeKeys: [] });
+}
+
+function axePageReportsTableHtml(check = {}) {
+  const pages = Array.isArray(check?.meta?.pageSummaries)
+    ? check.meta.pageSummaries
+    : [];
+  if (!pages.length) {
+    return `<p class="muted">No page-level reports found.</p>`;
+  }
+  const rows = pages
+    .slice(0, 300)
+    .map((page) => {
+      const violations = Number(page?.violationCount || page?.errors || 0);
+      const status = statusPillHtml(
+        violations > 0 ? `${violations} violation(s)` : "No issue",
+        violations > 0 ? "fail" : "pass",
+      );
+      const linkCell = page?.name
+        ? `<a class="report-link-btn" href="./axe/pages/${escapeContent(page.name)}">Open</a>`
+        : `<span class="muted">-</span>`;
+      return `<tr>
+        <td>${escapeContent(page?.url || page?.label || "-")}</td>
+        <td>${status}</td>
+        <td>${linkCell}</td>
+      </tr>`;
+    })
+    .join("");
+
+  return `<div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>URL</th><th>Violations</th><th>Report</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function axeDetailsHtml(check = {}) {
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
+  return `<section class="check-card">
+    <h2>aXe Overview</h2>
+    ${axeOverviewPillsHtml(stats)}
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Page Reports</h2>
+    ${axePageReportsTableHtml(check)}
+  </section>`;
+}
+
+function formStatusPill(status) {
+  const value = String(status || "-").toLowerCase();
+  if (value === "pass") return statusPillHtml("pass", "pass");
+  if (value === "fail" || value === "error") {
+    return statusPillHtml(value, "fail");
+  }
+  if (value === "skipped") return statusPillHtml("skipped", "warn");
+  if (value === "info" || value === "warn") return statusPillHtml(value, "info");
+  return `<span class="muted">-</span>`;
+}
+
+function pickFormCaseStatus(cases = [], testType) {
+  const matches = cases.filter((entry) => entry?.testType === testType);
+  if (!matches.length) return "-";
+  const statuses = matches.map((entry) =>
+    String(entry?.status || "").toLowerCase(),
+  );
+  if (statuses.includes("error")) return "error";
+  if (statuses.includes("fail")) return "fail";
+  if (statuses.includes("skipped")) return "skipped";
+  if (statuses.includes("pass")) return "pass";
+  if (statuses.includes("warn")) return "warn";
+  if (statuses.includes("info")) return "info";
+  return statuses[0] || "-";
+}
+
+function formDetailsHtml(check = {}) {
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const forms = Array.isArray(check?.meta?.forms) ? check.meta.forms : [];
+  const testCases = Array.isArray(check?.meta?.testCases)
+    ? check.meta.testCases
+    : [];
+  const execution =
+    check?.meta?.execution && typeof check.meta.execution === "object"
+      ? check.meta.execution
+      : {};
+  const preflight =
+    check?.meta?.preflight && typeof check.meta.preflight === "object"
+      ? check.meta.preflight
+      : {};
+  const issues = Array.isArray(check?.issues) ? check.issues : [];
+  const skippedReason =
+    String(stats?.skippedReason || execution?.reason || "").trim() || "";
+
+  const overview = {
+    totalForms: Number(stats?.totalForms || forms.length || 0),
+    testsRun: Number(stats?.testsRun || 0),
+    failedAssertions: Number(stats?.failed || 0),
+    preflightFailures: Number(stats?.preflightFailed || 0),
+  };
+  const overviewPills = [
+    statusPillHtml(`Forms tested: ${overview.totalForms}`, "info"),
+    statusPillHtml(`Tests run: ${overview.testsRun}`, "info"),
+    statusPillHtml(
+      `Failed assertions: ${overview.failedAssertions}`,
+      overview.failedAssertions > 0 ? "fail" : "pass",
+    ),
+    statusPillHtml(
+      `Preflight failures: ${overview.preflightFailures}`,
+      overview.preflightFailures > 0 ? "fail" : "pass",
+    ),
+  ].join("");
+
+  const rows = forms
+    .map((form) => {
+      const pageUrl = String(form?.pageUrl || "");
+      const formIndex = Number(form?.formIndex ?? 0);
+      const relatedCases = testCases.filter(
+        (entry) =>
+          String(entry?.pageUrl || "") === pageUrl &&
+          Number(entry?.formIndex ?? -1) === formIndex,
+      );
+      const frontend = pickFormCaseStatus(relatedCases, "frontend");
+      const apiValid = pickFormCaseStatus(relatedCases, "api-valid");
+      const apiInvalid = pickFormCaseStatus(relatedCases, "api-invalid");
+      const a11y = pickFormCaseStatus(relatedCases, "a11y");
+      return `<tr>
+        <td>${escapeContent(pageUrl || "-")}</td>
+        <td>${escapeContent(String(form?.id || "-"))}</td>
+        <td>${escapeContent(String(form?.formIndex ?? "-"))}</td>
+        <td>${escapeContent(String(form?.actionUrl || form?.action || "-"))}</td>
+        <td>${escapeContent(String(form?.method || "-"))}</td>
+        <td>${formStatusPill(frontend)}</td>
+        <td>${formStatusPill(apiValid)}</td>
+        <td>${formStatusPill(apiInvalid)}</td>
+        <td>${formStatusPill(a11y)}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const legacyRefsNotice = Array.isArray(preflight?.notices)
+    ? preflight.notices
+        .map((entry) => String(entry?.message || ""))
+        .find((msg) => msg.includes("Files with remaining legacy references:"))
+    : "";
+  const preflightLegacyIssue = issues
+    .map((entry) => String(entry?.message || ""))
+    .find((msg) => msg.includes("legacy /src/content/forms references remain"));
+
+  return `<section class="check-card">
+    <h2>Form tests overview</h2>
+    <div class="pill-row">${overviewPills}</div>
+    ${
+      skippedReason
+        ? `<p class="muted spacer-top"><strong>Skipped reason:</strong> ${escapeContent(skippedReason)}</p>`
+        : ""
+    }
+    ${
+      legacyRefsNotice
+        ? `<p class="muted spacer-top"><strong>Legacy reference files:</strong> ${escapeContent(legacyRefsNotice.replace("Files with remaining legacy references: ", ""))}</p>`
+        : ""
+    }
+    ${
+      preflightLegacyIssue && !legacyRefsNotice
+        ? `<p class="muted spacer-top"><strong>Legacy references:</strong> ${escapeContent(preflightLegacyIssue)}</p>`
+        : ""
+    }
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Forms found</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Page</th><th>Form ID</th><th>Index</th><th>Action</th><th>Method</th><th>Frontend</th><th>API valid</th><th>API invalid</th><th>a11y</th></tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="9">No forms were detected for this run.</td></tr>'}</tbody>
+      </table>
+    </div>
+  </section>`;
+}
+
+function axePageDetailHtml(page = {}, runBasePath = "", subtitle = "") {
+  const violations = Array.isArray(page?.violations) ? page.violations : [];
+  const rows = violations
+    .map((entry) => `<tr>
+      <td>${escapeContent(entry?.id || "-")}</td>
+      <td>${escapeContent(entry?.impact || "-")}</td>
+      <td>${escapeContent(entry?.nodeCount ?? 0)}</td>
+      <td><a href="${escapeContent(entry?.helpUrl || "#")}" target="_blank" rel="noreferrer">${escapeContent(entry?.help || "-")}</a></td>
+    </tr>`)
+    .join("");
+  return renderLayout({
+    title: "aXe page report",
+    subtitle,
+    navHtml: navHtml(runBasePath, ["axe"]),
+    stylesheetHref: `${runBasePath}/report.css`,
+    bodyHtml: `<section class="check-card">
+      <h2>aXe Page Report</h2>
+      <p class="muted">${escapeContent(page?.url || "-")}</p>
+      <div class="pill-row">
+        ${statusPillHtml(`Violations: ${Number(page?.violationCount || 0)}`, Number(page?.violationCount || 0) > 0 ? "fail" : "pass")}
+        ${statusPillHtml(`Incomplete: ${Number(page?.incompleteCount || 0)}`, "info")}
+      </div>
+    </section>
+    <section class="check-card spacer-top">
+      <h2>Violations</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Rule</th><th>Impact</th><th>Nodes</th><th>Help</th></tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="4">No violations.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>`,
+  });
+}
+
 function seoDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
@@ -807,6 +1034,15 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
           path.join(outDir, "axe", "report.html"),
         );
       }
+      const axePages = Array.isArray(check?.meta?.pageSummaries)
+        ? check.meta.pageSummaries
+        : [];
+      for (let i = 0; i < axePages.length; i += 1) {
+        const page = axePages[i];
+        const name = page?.name || `${String(i + 1).padStart(4, "0")}.html`;
+        const html = axePageDetailHtml(page, runBasePath, subtitle);
+        writeText(path.join(outDir, "axe", "pages", name), html);
+      }
     }
     if (checkId === "form") {
       if (check?.meta?.reportHtmlPath) {
@@ -904,9 +1140,9 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
         checkId === "pa11y"
           ? pa11yDetailsHtml(check)
           : checkId === "axe"
-            ? pa11yDetailsHtml(check)
+            ? axeDetailsHtml(check)
             : checkId === "form"
-              ? checkDetailsHtml(checkId, check)
+              ? formDetailsHtml(check)
               : checkId === "seo"
                 ? seoDetailsHtml(check)
                 : checkId === "links"

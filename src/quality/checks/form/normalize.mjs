@@ -6,6 +6,18 @@ function toNumber(value) {
 export function normalizeFormPayload(raw, options = {}) {
   const stats = raw?.stats || null;
   const issues = Array.isArray(raw?.issues) ? raw.issues : [];
+  const results =
+    raw?.results && typeof raw.results === "object" ? raw.results : {};
+  const forms = Array.isArray(results?.forms) ? results.forms : [];
+  const testCases = Array.isArray(results?.testCases) ? results.testCases : [];
+  const preflight =
+    results?.preflight && typeof results.preflight === "object"
+      ? results.preflight
+      : null;
+  const execution =
+    results?.execution && typeof results.execution === "object"
+      ? results.execution
+      : null;
 
   const failedCount =
     stats && typeof stats === "object"
@@ -25,6 +37,10 @@ export function normalizeFormPayload(raw, options = {}) {
       summaryMdPath: raw?.summaryMdPath || null,
       testedForms:
         stats && typeof stats === "object" ? toNumber(stats.totalForms) : 0,
+      forms,
+      testCases,
+      preflight,
+      execution,
     },
   };
 }

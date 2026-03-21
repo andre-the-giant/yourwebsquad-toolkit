@@ -200,8 +200,7 @@ function detectFormSourceLayout(projectRoot = process.cwd()) {
     notices.push({
       type: "missing-forms-config",
       severity: "info",
-      message:
-        "No form definition files were found under /src/forms.",
+      message: "No form definition files were found under /src/forms.",
     });
   }
 
@@ -310,7 +309,9 @@ function writePlaceholderReport(reportDir, payload = {}) {
   const issues = Array.isArray(payload?.issues) ? payload.issues : [];
   const testCases = Array.isArray(payload?.testCases) ? payload.testCases : [];
   const preflight = payload?.preflight || {};
-  const preflightAlerts = Array.isArray(preflight?.alerts) ? preflight.alerts : [];
+  const preflightAlerts = Array.isArray(preflight?.alerts)
+    ? preflight.alerts
+    : [];
   const preflightNotices = Array.isArray(preflight?.notices)
     ? preflight.notices
     : [];
@@ -950,11 +951,7 @@ async function runFormA11yProbes(
       ? payload.violations
       : [];
     const status =
-      exitCode === 0
-        ? violations.length === 0
-          ? "pass"
-          : "fail"
-        : "error";
+      exitCode === 0 ? (violations.length === 0 ? "pass" : "fail") : "error";
     results.push({
       pageUrl,
       formIndex,
@@ -1034,7 +1031,9 @@ function buildTestCases({
 } = {}) {
   const cases = [];
 
-  for (const alert of Array.isArray(preflight?.alerts) ? preflight.alerts : []) {
+  for (const alert of Array.isArray(preflight?.alerts)
+    ? preflight.alerts
+    : []) {
     cases.push({
       pageUrl: "-",
       formIndex: "",
@@ -1044,7 +1043,9 @@ function buildTestCases({
     });
   }
 
-  for (const note of Array.isArray(preflight?.notices) ? preflight.notices : []) {
+  for (const note of Array.isArray(preflight?.notices)
+    ? preflight.notices
+    : []) {
     cases.push({
       pageUrl: "-",
       formIndex: "",
@@ -1055,7 +1056,9 @@ function buildTestCases({
   }
 
   for (const entry of frontendProbeResults) {
-    const requiredCount = Number(entry?.snapshot?.validation?.requiredCount || 0);
+    const requiredCount = Number(
+      entry?.snapshot?.validation?.requiredCount || 0,
+    );
     const requiredInvalidCount = Number(
       entry?.snapshot?.validation?.requiredInvalidCount || 0,
     );
@@ -1148,7 +1151,8 @@ async function main() {
         { quiet },
       );
       shouldMigrate = Boolean(answer);
-      migrationDecision = answer === null ? "no-non-interactive" : shouldMigrate ? "yes" : "no";
+      migrationDecision =
+        answer === null ? "no-non-interactive" : shouldMigrate ? "yes" : "no";
     }
 
     if (shouldMigrate) {

@@ -182,9 +182,14 @@ function countNodes(entries) {
 }
 
 function normalizeAxePageResult(raw = {}) {
-  const payload = raw?.payload && typeof raw.payload === "object" ? raw.payload : {};
-  const violations = Array.isArray(payload.violations) ? payload.violations : [];
-  const incomplete = Array.isArray(payload.incomplete) ? payload.incomplete : [];
+  const payload =
+    raw?.payload && typeof raw.payload === "object" ? raw.payload : {};
+  const violations = Array.isArray(payload.violations)
+    ? payload.violations
+    : [];
+  const incomplete = Array.isArray(payload.incomplete)
+    ? payload.incomplete
+    : [];
   const passes = Array.isArray(payload.passes) ? payload.passes : [];
 
   return {
@@ -211,7 +216,9 @@ function normalizeAxePageResult(raw = {}) {
 
 function buildStats(pageResults = []) {
   const total = pageResults.length;
-  const failedPages = pageResults.filter((entry) => entry.status === "failed").length;
+  const failedPages = pageResults.filter(
+    (entry) => entry.status === "failed",
+  ).length;
   const passedPages = total - failedPages;
 
   const violationCount = pageResults.reduce(
@@ -298,7 +305,11 @@ function writeSummary(reportDir, { stats, pageResults }) {
     );
   }
 
-  fs.writeFileSync(path.join(reportDir, "SUMMARY.md"), `${lines.join("\n")}\n`, "utf8");
+  fs.writeFileSync(
+    path.join(reportDir, "SUMMARY.md"),
+    `${lines.join("\n")}\n`,
+    "utf8",
+  );
 }
 
 function escapeHtml(value) {
@@ -418,7 +429,9 @@ async function main() {
   writeSummary(reportDir, { stats, pageResults });
   writeHtmlReport(reportDir, { stats, pageResults, issues });
 
-  const runFailureCount = rawResults.filter((entry) => entry.exitCode !== 0).length;
+  const runFailureCount = rawResults.filter(
+    (entry) => entry.exitCode !== 0,
+  ).length;
   const hasViolations = Number(stats.violationCount || 0) > 0;
   if (runFailureCount > 0 || hasViolations) {
     process.exitCode = 1;

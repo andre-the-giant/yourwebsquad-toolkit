@@ -905,21 +905,21 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
           ? pa11yDetailsHtml(check)
           : checkId === "axe"
             ? pa11yDetailsHtml(check)
-          : checkId === "form"
-            ? checkDetailsHtml(checkId, check)
-          : checkId === "seo"
-            ? seoDetailsHtml(check)
-            : checkId === "links"
-              ? linksDetailsHtml(check)
-              : checkId === "jsonld"
-                ? jsonldDetailsHtml(check)
-                : checkId === "security"
-                  ? securityDetailsHtml(check)
-                  : checkId === "sitespeed"
-                    ? sitespeedDetailsHtml(check)
-                    : checkId === "vnu"
-                      ? vnuDetailsHtml(check)
-                      : checkDetailsHtml(checkId, check),
+            : checkId === "form"
+              ? checkDetailsHtml(checkId, check)
+              : checkId === "seo"
+                ? seoDetailsHtml(check)
+                : checkId === "links"
+                  ? linksDetailsHtml(check)
+                  : checkId === "jsonld"
+                    ? jsonldDetailsHtml(check)
+                    : checkId === "security"
+                      ? securityDetailsHtml(check)
+                      : checkId === "sitespeed"
+                        ? sitespeedDetailsHtml(check)
+                        : checkId === "vnu"
+                          ? vnuDetailsHtml(check)
+                          : checkDetailsHtml(checkId, check),
     });
     writeText(path.join(outDir, `${checkId}.html`), page);
   }

@@ -408,7 +408,7 @@ async function runApiProbe(
       json = null;
     }
 
-    const success = response.ok && (json?.ok !== false);
+    const success = response.ok && json?.ok !== false;
     return {
       pageUrl: form?.pageUrl || "",
       formIndex: Number(form?.formIndex || 0),
@@ -443,13 +443,22 @@ async function runApiProbe(
 
 function withEmailTestOverrides(payload = {}) {
   const next = { ...(payload || {}) };
-  if (typeof next.subject === "string" && !next.subject.startsWith("[THIS IS A TEST] ")) {
+  if (
+    typeof next.subject === "string" &&
+    !next.subject.startsWith("[THIS IS A TEST] ")
+  ) {
     next.subject = `[THIS IS A TEST] ${next.subject}`;
   }
-  if (typeof next.message === "string" && !next.message.startsWith("THIS IS A TEST - DO NOT ANSWER")) {
+  if (
+    typeof next.message === "string" &&
+    !next.message.startsWith("THIS IS A TEST - DO NOT ANSWER")
+  ) {
     next.message = `THIS IS A TEST - DO NOT ANSWER\n\n${next.message}`;
   }
-  if (typeof next.body === "string" && !next.body.startsWith("THIS IS A TEST - DO NOT ANSWER")) {
+  if (
+    typeof next.body === "string" &&
+    !next.body.startsWith("THIS IS A TEST - DO NOT ANSWER")
+  ) {
     next.body = `THIS IS A TEST - DO NOT ANSWER\n\n${next.body}`;
   }
   next.__ywsTestRecipient = "hello@yourwebsquad.com";
@@ -478,7 +487,10 @@ async function runFrontendProbes(forms = [], { quiet = false } = {}) {
       }
 
       try {
-        await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await page.goto(pageUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 30000,
+        });
         const snapshot = await page.evaluate((idx) => {
           const formsOnPage = Array.from(document.querySelectorAll("form"));
           const el = formsOnPage[idx] || null;
@@ -490,7 +502,9 @@ async function runFrontendProbes(forms = [], { quiet = false } = {}) {
 
           if (el instanceof HTMLFormElement) {
             const requiredControls = Array.from(
-              el.querySelectorAll("input[required], select[required], textarea[required]"),
+              el.querySelectorAll(
+                "input[required], select[required], textarea[required]",
+              ),
             ).filter((control) => control instanceof HTMLElement);
 
             validation.requiredCount = requiredControls.length;
@@ -507,11 +521,14 @@ async function runFrontendProbes(forms = [], { quiet = false } = {}) {
             }
 
             const invalidCount = requiredControls.filter((control) => {
-              return "checkValidity" in control ? !control.checkValidity() : false;
+              return "checkValidity" in control
+                ? !control.checkValidity()
+                : false;
             }).length;
             validation.requiredInvalidCount = invalidCount;
             validation.assertionPassed =
-              validation.requiredCount === 0 || validation.requiredInvalidCount > 0;
+              validation.requiredCount === 0 ||
+              validation.requiredInvalidCount > 0;
           }
 
           return {
@@ -591,7 +608,9 @@ async function runAxeOnce(url, { reportDir, quiet = false } = {}) {
     }
   }
 
-  const violations = Array.isArray(payload?.violations) ? payload.violations : [];
+  const violations = Array.isArray(payload?.violations)
+    ? payload.violations
+    : [];
   return {
     pageUrl: url,
     exitCode,
@@ -601,7 +620,10 @@ async function runAxeOnce(url, { reportDir, quiet = false } = {}) {
   };
 }
 
-async function runFormA11yProbes(forms = [], { reportDir, quiet = false } = {}) {
+async function runFormA11yProbes(
+  forms = [],
+  { reportDir, quiet = false } = {},
+) {
   const urls = Array.from(
     new Set(
       (Array.isArray(forms) ? forms : [])
@@ -699,7 +721,9 @@ async function main() {
   const failedFrontendProbes = frontendProbeResults.filter(
     (entry) => !entry?.success,
   ).length;
-  const failedFormA11y = formA11yResults.filter((entry) => !entry?.success).length;
+  const failedFormA11y = formA11yResults.filter(
+    (entry) => !entry?.success,
+  ).length;
 
   const stats = {
     urlsTested: urls.length,

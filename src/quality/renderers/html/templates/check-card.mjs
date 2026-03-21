@@ -32,8 +32,7 @@ function statusForCheck(checkId, check = {}) {
       return { label: "Markup errors found", tone: "fail" };
     if (checkId === "axe")
       return { label: "Accessibility issues found", tone: "fail" };
-    if (checkId === "form")
-      return { label: "Form issues found", tone: "fail" };
+    if (checkId === "form") return { label: "Form issues found", tone: "fail" };
     return { label: "Needs attention", tone: "fail" };
   }
   const warningCount = asNumber(stats.warningCount);

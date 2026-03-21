@@ -19,6 +19,7 @@ test("default checks register and execution plan follows config order", () => {
     lighthouse: true,
     pa11y: false,
     axe: false,
+    form: false,
     seo: true,
     links: true,
     jsonld: false,

@@ -3,7 +3,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { spawn } from "node:child_process";
 import { parse } from "node-html-parser";
+import puppeteer from "puppeteer";
 
 const DEFAULT_REPORT_DIR = path.join(process.cwd(), "reports", "form");
 
@@ -90,6 +92,14 @@ function normalizeUrl(input) {
   }
 }
 
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
 function loadUrlsFromFile(filePath) {
   if (!filePath) {
     throw new Error("Missing required option: --urls-file");
@@ -117,18 +127,108 @@ function loadUrlsFromFile(filePath) {
   return Array.from(unique);
 }
 
-function writePlaceholderReport(reportDir, stats) {
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function writePlaceholderReport(reportDir, payload = {}) {
+  const stats = payload?.stats || {};
+  const frontendProbeResults = Array.isArray(payload?.frontendProbeResults)
+    ? payload.frontendProbeResults
+    : [];
+  const apiProbeResults = Array.isArray(payload?.apiProbeResults)
+    ? payload.apiProbeResults
+    : [];
+  const formA11yResults = Array.isArray(payload?.formA11yResults)
+    ? payload.formA11yResults
+    : [];
+
+  const frontendRows = frontendProbeResults
+    .map(
+      (item) => `<tr>
+  <td>${escapeHtml(item?.pageUrl || "")}</td>
+  <td>${escapeHtml(item?.formIndex ?? "")}</td>
+  <td>${escapeHtml(item?.success ? "pass" : "fail")}</td>
+  <td>${escapeHtml(item?.snapshot?.validation?.requiredCount ?? 0)}</td>
+  <td>${escapeHtml(item?.snapshot?.validation?.requiredInvalidCount ?? 0)}</td>
+</tr>`,
+    )
+    .join("\n");
+
+  const apiRows = apiProbeResults
+    .map(
+      (item) => `<tr>
+  <td>${escapeHtml(item?.pageUrl || "")}</td>
+  <td>${escapeHtml(item?.formIndex ?? "")}</td>
+  <td>${escapeHtml(item?.assertions?.validExpectedSuccess ? "pass" : "fail")}</td>
+  <td>${escapeHtml(item?.assertions?.invalidExpectedFailure ? "pass" : "fail")}</td>
+  <td>${escapeHtml(item?.validProbe?.status ?? "")}/${escapeHtml(item?.invalidProbe?.status ?? "")}</td>
+</tr>`,
+    )
+    .join("\n");
+
+  const a11yRows = formA11yResults
+    .map(
+      (item) => `<tr>
+  <td>${escapeHtml(item?.pageUrl || "")}</td>
+  <td>${escapeHtml(item?.violationCount ?? 0)}</td>
+  <td>${escapeHtml(item?.success ? "pass" : "fail")}</td>
+</tr>`,
+    )
+    .join("\n");
+
   const html = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Form tests report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; color: #111827; }
+    h1,h2 { margin-bottom: 8px; }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 20px; }
+    .chip { border: 1px solid #d1d5db; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 24px; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
 </head>
 <body>
   <h1>Form tests report</h1>
-  <p>Placeholder report. Implementation in progress.</p>
-  <pre>${JSON.stringify(stats, null, 2)}</pre>
+  <div class="chips">
+    <span class="chip">URLs tested: ${escapeHtml(stats.urlsTested ?? 0)}</span>
+    <span class="chip">Forms: ${escapeHtml(stats.totalForms ?? 0)}</span>
+    <span class="chip">Tests run: ${escapeHtml(stats.testsRun ?? 0)}</span>
+    <span class="chip">Failed: ${escapeHtml(stats.failed ?? 0)}</span>
+  </div>
+
+  <h2>Frontend validation probes</h2>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Form index</th><th>Status</th><th>Required fields</th><th>Required invalid</th></tr>
+    </thead>
+    <tbody>${frontendRows || '<tr><td colspan="5">No frontend probes.</td></tr>'}</tbody>
+  </table>
+
+  <h2>API probes</h2>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Form index</th><th>Valid probe</th><th>Invalid probe</th><th>Status codes</th></tr>
+    </thead>
+    <tbody>${apiRows || '<tr><td colspan="5">No API probes.</td></tr>'}</tbody>
+  </table>
+
+  <h2>Form accessibility (aXe)</h2>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Violations</th><th>Status</th></tr>
+    </thead>
+    <tbody>${a11yRows || '<tr><td colspan="3">No form a11y probes.</td></tr>'}</tbody>
+  </table>
 </body>
 </html>`;
   fs.writeFileSync(path.join(reportDir, "report.html"), html, "utf8");
@@ -356,11 +456,180 @@ function withEmailTestOverrides(payload = {}) {
   return next;
 }
 
+async function runFrontendProbes(forms = [], { quiet = false } = {}) {
+  if (!forms.length) return [];
+
+  const browser = await puppeteer.launch({ headless: "new" });
+  const page = await browser.newPage();
+  const results = [];
+
+  try {
+    for (const form of forms) {
+      const pageUrl = String(form?.pageUrl || "");
+      const formIndex = Number(form?.formIndex || 0);
+      if (!pageUrl) {
+        results.push({
+          pageUrl,
+          formIndex,
+          success: false,
+          error: "Missing page URL.",
+        });
+        continue;
+      }
+
+      try {
+        await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+        const snapshot = await page.evaluate((idx) => {
+          const formsOnPage = Array.from(document.querySelectorAll("form"));
+          const el = formsOnPage[idx] || null;
+          let validation = {
+            requiredCount: 0,
+            requiredInvalidCount: 0,
+            assertionPassed: true,
+          };
+
+          if (el instanceof HTMLFormElement) {
+            const requiredControls = Array.from(
+              el.querySelectorAll("input[required], select[required], textarea[required]"),
+            ).filter((control) => control instanceof HTMLElement);
+
+            validation.requiredCount = requiredControls.length;
+
+            for (const control of requiredControls) {
+              if (
+                control instanceof HTMLInputElement ||
+                control instanceof HTMLTextAreaElement
+              ) {
+                control.value = "";
+              } else if (control instanceof HTMLSelectElement) {
+                control.selectedIndex = -1;
+              }
+            }
+
+            const invalidCount = requiredControls.filter((control) => {
+              return "checkValidity" in control ? !control.checkValidity() : false;
+            }).length;
+            validation.requiredInvalidCount = invalidCount;
+            validation.assertionPassed =
+              validation.requiredCount === 0 || validation.requiredInvalidCount > 0;
+          }
+
+          return {
+            formsCount: formsOnPage.length,
+            found: Boolean(el),
+            id: el?.getAttribute("id") || "",
+            name: el?.getAttribute("name") || "",
+            action: el?.getAttribute("action") || "",
+            method: (el?.getAttribute("method") || "post").toLowerCase(),
+            validation,
+          };
+        }, formIndex);
+
+        results.push({
+          pageUrl,
+          formIndex,
+          success: Boolean(
+            snapshot?.found && snapshot?.validation?.assertionPassed !== false,
+          ),
+          snapshot,
+        });
+      } catch (error) {
+        if (!quiet) {
+          console.log(
+            `Frontend probe failed for ${pageUrl}#${formIndex}: ${error?.message || error}`,
+          );
+        }
+        results.push({
+          pageUrl,
+          formIndex,
+          success: false,
+          error: error?.message || String(error),
+        });
+      }
+    }
+  } finally {
+    await page.close();
+    await browser.close();
+  }
+
+  return results;
+}
+
+async function runAxeOnce(url, { reportDir, quiet = false } = {}) {
+  const outName = `form-a11y-${slugify(url) || "page"}.json`;
+  const args = [
+    "axe",
+    url,
+    "--tags",
+    "wcag2a,wcag2aa",
+    "--dir",
+    reportDir,
+    "--save",
+    outName,
+    "--show-errors",
+    "false",
+  ];
+
+  const exitCode = await new Promise((resolve) => {
+    const child = spawn("npx", args, {
+      shell: false,
+      stdio: quiet ? "ignore" : "inherit",
+      env: process.env,
+    });
+    child.on("exit", (code) => resolve(code ?? 1));
+    child.on("error", () => resolve(1));
+  });
+
+  const outPath = path.join(reportDir, outName);
+  let payload = null;
+  if (fs.existsSync(outPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(outPath, "utf8"));
+      payload = Array.isArray(parsed) ? parsed[0] || null : parsed;
+    } catch {
+      payload = null;
+    }
+  }
+
+  const violations = Array.isArray(payload?.violations) ? payload.violations : [];
+  return {
+    pageUrl: url,
+    exitCode,
+    violationCount: violations.length,
+    success: exitCode === 0 && violations.length === 0,
+    outputPath: outPath,
+  };
+}
+
+async function runFormA11yProbes(forms = [], { reportDir, quiet = false } = {}) {
+  const urls = Array.from(
+    new Set(
+      (Array.isArray(forms) ? forms : [])
+        .map((form) => normalizeUrl(form?.pageUrl))
+        .filter(Boolean),
+    ),
+  );
+
+  const results = [];
+  for (const pageUrl of urls) {
+    const result = await runAxeOnce(pageUrl, { reportDir, quiet });
+    results.push(result);
+  }
+  return results;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const reportDir = prepareReportDir(args.reportDir);
   const urls = loadUrlsFromFile(args.urlsFile);
   const forms = await discoverForms(urls, { quiet: Boolean(args.quiet) });
+  const formA11yResults = await runFormA11yProbes(forms, {
+    reportDir,
+    quiet: Boolean(args.quiet),
+  });
+  const frontendProbeResults = await runFrontendProbes(forms, {
+    quiet: Boolean(args.quiet),
+  });
   const payloadsPreview = forms.map((form) => ({
     pageUrl: form.pageUrl,
     formIndex: form.formIndex,
@@ -427,12 +696,19 @@ async function main() {
       !entry?.assertions?.validExpectedSuccess ||
       !entry?.assertions?.invalidExpectedFailure,
   ).length;
+  const failedFrontendProbes = frontendProbeResults.filter(
+    (entry) => !entry?.success,
+  ).length;
+  const failedFormA11y = formA11yResults.filter((entry) => !entry?.success).length;
 
   const stats = {
     urlsTested: urls.length,
     totalForms: forms.length,
-    testsRun: apiProbeResults.length * 2,
-    failed: failedProbes,
+    testsRun:
+      apiProbeResults.length * 2 +
+      frontendProbeResults.length +
+      formA11yResults.length,
+    failed: failedProbes + failedFrontendProbes + failedFormA11y,
     createdAt,
     baseUrl: args.base || null,
     urlsFile: args.urlsFile || null,
@@ -440,6 +716,8 @@ async function main() {
 
   writeJson(path.join(reportDir, "results.json"), {
     forms,
+    formA11yResults,
+    frontendProbeResults,
     payloadsPreview,
     apiProbeResults,
   });
@@ -450,7 +728,12 @@ async function main() {
     `# Form tests report\n\n- Created: ${createdAt}\n- URLs tested: ${urls.length}\n- Total forms: ${forms.length}\n- Tests run: ${apiProbeResults.length}\n- Failed: ${failedProbes}\n`,
     "utf8",
   );
-  writePlaceholderReport(reportDir, stats);
+  writePlaceholderReport(reportDir, {
+    stats,
+    frontendProbeResults,
+    apiProbeResults,
+    formA11yResults,
+  });
 
   if (stats.failed > 0) {
     process.exitCode = 1;

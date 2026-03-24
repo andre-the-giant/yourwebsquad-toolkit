@@ -1117,7 +1117,8 @@ async function main() {
     qualityConfig,
     availability,
   );
-  const formMigrationMode = await promptForFormMigrationIfNeeded(selectedChecks);
+  const formMigrationMode =
+    await promptForFormMigrationIfNeeded(selectedChecks);
   const selectedBaseUrl = selectedTarget?.baseUrl;
   if (!selectedBaseUrl) {
     throw new Error("No valid base URL resolved for selected target.");

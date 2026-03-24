@@ -218,6 +218,31 @@ function buildCheckAvailability(selectedTarget) {
   };
 }
 
+function hasLegacyFormsFolder(projectRoot = process.cwd()) {
+  return fs.existsSync(path.join(projectRoot, "src", "content", "forms"));
+}
+
+async function promptForFormMigrationIfNeeded(selectedChecks) {
+  if (!selectedChecks?.form) return "prompt";
+  if (!hasLegacyFormsFolder(process.cwd())) return "prompt";
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return "no";
+
+  const { migrateLegacyForms } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "migrateLegacyForms",
+      message:
+        "Legacy forms found at src/content/forms. Migrate to src/forms before form tests?",
+      choices: [
+        { name: "Yes (migrate and continue form tests)", value: "yes" },
+        { name: "No (skip form tests and fail preflight)", value: "no" },
+      ],
+      default: "yes",
+    },
+  ]);
+  return migrateLegacyForms;
+}
+
 function applyAvailabilityToFlags(flags, availability) {
   const next = { ...flags };
   for (const key of CHECK_KEYS) {
@@ -1092,6 +1117,7 @@ async function main() {
     qualityConfig,
     availability,
   );
+  const formMigrationMode = await promptForFormMigrationIfNeeded(selectedChecks);
   const selectedBaseUrl = selectedTarget?.baseUrl;
   if (!selectedBaseUrl) {
     throw new Error("No valid base URL resolved for selected target.");
@@ -1361,6 +1387,8 @@ async function main() {
           urlsFile,
           "--all-urls-file",
           allUrlsFile,
+          "--migrate-legacy-forms",
+          formMigrationMode,
           "--report-dir",
           path.join(REPORT_ROOT, "form"),
           QUIET_MODE ? "--quiet" : "",

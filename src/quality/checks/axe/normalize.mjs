@@ -16,6 +16,7 @@ export function normalizeAxePayload(raw, options = {}) {
     const violationCount = toNumber(entry?.violationCount);
     const incompleteCount = toNumber(entry?.incompleteCount);
     const status = violationCount > 0 ? "failed" : "passed";
+    const violations = Array.isArray(entry?.violations) ? entry.violations : [];
     return {
       name: `${String(index + 1).padStart(4, "0")}.html`,
       label: url || `Page ${index + 1}`,
@@ -25,6 +26,7 @@ export function normalizeAxePayload(raw, options = {}) {
       violationCount,
       incompleteCount,
       status,
+      violations,
     };
   });
 

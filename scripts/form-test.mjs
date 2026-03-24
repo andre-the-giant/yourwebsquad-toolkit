@@ -483,7 +483,10 @@ function listLegacyFormPathReferences(projectRoot = process.cwd()) {
       } catch {
         continue;
       }
-      if (text.includes("src/content/forms") || text.includes("content/forms")) {
+      if (
+        text.includes("src/content/forms") ||
+        text.includes("content/forms")
+      ) {
         out.push(path.relative(projectRoot, fullPath));
       }
     }

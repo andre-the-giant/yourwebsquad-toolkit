@@ -786,6 +786,23 @@ async function discoverForms(
       .map((entry) => String(entry || "").trim())
       .filter(Boolean),
   );
+  const normalizeFormId = (value) => {
+    const id = String(value || "").trim();
+    if (!id) return "";
+    return id.startsWith("form-") ? id.slice("form-".length) : id;
+  };
+  const apiActionId = (actionUrl) => {
+    try {
+      const parsed = new URL(String(actionUrl || ""));
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      if (parts.length >= 2 && parts[0].toLowerCase() === "api") {
+        return parts[1] || "";
+      }
+      return "";
+    } catch {
+      return "";
+    }
+  };
 
   for (const url of urls) {
     let html = "";
@@ -832,7 +849,13 @@ async function discoverForms(
         continue;
       }
       if (allowedIds.size > 0) {
-        if (!id || !allowedIds.has(id)) {
+        const normalizedId = normalizeFormId(id);
+        const actionId = apiActionId(actionUrl);
+        const matched =
+          (id && allowedIds.has(id)) ||
+          (normalizedId && allowedIds.has(normalizedId)) ||
+          (actionId && allowedIds.has(actionId));
+        if (!matched) {
           continue;
         }
       }

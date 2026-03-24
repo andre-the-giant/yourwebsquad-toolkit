@@ -329,6 +329,29 @@ async function askYesNo(message, { quiet = false } = {}) {
   }
 }
 
+function evaluateFormsConfigValidity(formsConfig, formsCatalog) {
+  const issues = [];
+  const formsBaseDir = String(formsCatalog?.formsBaseDir || "");
+  const normalizedBase = formsBaseDir.split(path.sep).join("/");
+
+  if (formsConfig?.missingConfig) {
+    issues.push(
+      "Missing src/content.config.ts. Form tests require this file for Astro v6 projects.",
+    );
+  }
+
+  if (!normalizedBase.endsWith("/src/forms")) {
+    issues.push(
+      `content.config.ts forms base should resolve to /src/forms (current: ${formsBaseDir || "unknown"}).`,
+    );
+  }
+
+  return {
+    valid: issues.length === 0,
+    issues,
+  };
+}
+
 function listAllFiles(baseDir) {
   if (!baseDir || !fs.existsSync(baseDir)) return [];
   const stack = [baseDir];
@@ -460,7 +483,7 @@ function listLegacyFormPathReferences(projectRoot = process.cwd()) {
       } catch {
         continue;
       }
-      if (text.includes("src/content/forms")) {
+      if (text.includes("src/content/forms") || text.includes("content/forms")) {
         out.push(path.relative(projectRoot, fullPath));
       }
     }
@@ -468,6 +491,73 @@ function listLegacyFormPathReferences(projectRoot = process.cwd()) {
 
   out.sort();
   return out;
+}
+
+function rewriteLegacyFormPathReferences(projectRoot = process.cwd()) {
+  const root = path.join(projectRoot, "src");
+  if (!fs.existsSync(root)) return { updatedFiles: [] };
+  const stack = [root];
+  const updatedFiles = [];
+  const skipDirs = new Set([
+    "node_modules",
+    ".git",
+    "build",
+    "reports",
+    "dist",
+  ]);
+  const scanExt = new Set([
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".astro",
+    ".json",
+    ".yml",
+    ".yaml",
+    ".md",
+    ".mdx",
+    ".php",
+  ]);
+
+  const replacements = [
+    [/src\/content\/forms/g, "src/forms"],
+    [/\/content\/forms\//g, "/forms/"],
+    [/\/content\/forms\b/g, "/forms"],
+  ];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (skipDirs.has(entry.name)) continue;
+        stack.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!scanExt.has(path.extname(entry.name).toLowerCase())) continue;
+      let text = "";
+      try {
+        text = fs.readFileSync(fullPath, "utf8");
+      } catch {
+        continue;
+      }
+      let next = text;
+      for (const [pattern, replacement] of replacements) {
+        next = next.replace(pattern, replacement);
+      }
+      if (next !== text) {
+        fs.writeFileSync(fullPath, next, "utf8");
+        updatedFiles.push(path.relative(projectRoot, fullPath));
+      }
+    }
+  }
+
+  updatedFiles.sort();
+  return { updatedFiles };
 }
 
 function writePlaceholderReport(reportDir, payload = {}) {
@@ -1310,8 +1400,12 @@ async function main() {
   const allUrls = args.allUrlsFile ? loadUrlsFromFile(args.allUrlsFile) : [];
   const discoveryUrls = allUrls.length > 0 ? allUrls : urls;
   let preflight = detectFormSourceLayout(process.cwd());
-  const formsConfig = resolveFormsBaseDirFromContentConfig(process.cwd());
-  const formsCatalog = extractFormIds(formsConfig.formsBaseDir);
+  let formsConfig = resolveFormsBaseDirFromContentConfig(process.cwd());
+  let formsCatalog = extractFormIds(formsConfig.formsBaseDir);
+  const hasAnyFormDefinitions =
+    preflight.srcFormsFiles.length > 0 ||
+    preflight.legacyFormsFiles.length > 0 ||
+    formsCatalog.fileCount > 0;
   if (formsConfig.reason) {
     preflight.notices.push({
       type: "forms-config-source",
@@ -1324,7 +1418,7 @@ async function main() {
     severity: "info",
     message: `Loaded ${formsCatalog.formIds.length} form id(s) from ${formsCatalog.fileCount} definition file(s).`,
   });
-  if (formsConfig.missingConfig) {
+  if (formsConfig.missingConfig && hasAnyFormDefinitions) {
     preflight.alerts.push({
       type: "missing-content-config",
       severity: "warning",
@@ -1332,11 +1426,30 @@ async function main() {
         "Missing src/content.config.ts. Form tests require this file for Astro v6 projects.",
     });
   }
+  const initialConfigValidity = hasAnyFormDefinitions
+    ? evaluateFormsConfigValidity(formsConfig, formsCatalog)
+    : { valid: true, issues: [] };
+  const initialConfigInvalid = !initialConfigValidity.valid;
+  if (!initialConfigValidity.valid) {
+    for (const issue of initialConfigValidity.issues) {
+      preflight.alerts.push({
+        type: "invalid-content-config-forms-base",
+        severity: "warning",
+        message: issue,
+      });
+    }
+  }
   const quiet = Boolean(args.quiet);
   let migrationDecision = "not-needed";
   let migrationPerformed = false;
   let skipped = false;
   let skippedReason = "";
+
+  if (initialConfigInvalid && preflight.legacyFormsFiles.length === 0) {
+    skipped = true;
+    skippedReason =
+      "Form collections config is invalid: forms must be loaded from /src/forms.";
+  }
 
   if (preflight.legacyFormsFiles.length > 0) {
     const mode = String(args.migrateLegacyForms || "prompt");
@@ -1353,9 +1466,13 @@ async function main() {
         "Legacy forms found in /src/content/forms. Migrate now to /src/forms and continue form tests?",
         { quiet },
       );
-      shouldMigrate = Boolean(answer);
-      migrationDecision =
-        answer === null ? "no-non-interactive" : shouldMigrate ? "yes" : "no";
+      if (answer === null) {
+        shouldMigrate = true;
+        migrationDecision = "yes-non-interactive";
+      } else {
+        shouldMigrate = Boolean(answer);
+        migrationDecision = shouldMigrate ? "yes" : "no";
+      }
     }
 
     if (shouldMigrate) {
@@ -1384,6 +1501,15 @@ async function main() {
             "src/content.config.ts not found during migration safety checks.",
         });
       }
+      const rewritten = rewriteLegacyFormPathReferences(process.cwd());
+      preflight.notices.push({
+        type: "legacy-path-rewrite",
+        severity: "info",
+        message:
+          rewritten.updatedFiles.length > 0
+            ? `Updated ${rewritten.updatedFiles.length} file(s) with /content/forms -> /forms path rewrites.`
+            : "No legacy /content/forms include paths needed rewriting.",
+      });
       const legacyRefs = listLegacyFormPathReferences(process.cwd());
       if (legacyRefs.length > 0 || configMigration.stillLegacy) {
         preflight.alerts.push({
@@ -1404,6 +1530,29 @@ async function main() {
         skipped = true;
         skippedReason =
           "Migration completed but legacy /src/content/forms references still exist. Form tests skipped.";
+      }
+      formsConfig = resolveFormsBaseDirFromContentConfig(process.cwd());
+      formsCatalog = extractFormIds(formsConfig.formsBaseDir);
+      preflight.notices.push({
+        type: "forms-catalog-after-migration",
+        severity: "info",
+        message: `After migration, loaded ${formsCatalog.formIds.length} form id(s) from ${formsCatalog.fileCount} definition file(s).`,
+      });
+      const configValidityAfterMigration = evaluateFormsConfigValidity(
+        formsConfig,
+        formsCatalog,
+      );
+      if (!configValidityAfterMigration.valid) {
+        for (const issue of configValidityAfterMigration.issues) {
+          preflight.alerts.push({
+            type: "invalid-content-config-forms-base",
+            severity: "warning",
+            message: issue,
+          });
+        }
+        skipped = true;
+        skippedReason =
+          "Migration completed, but content collections are not valid for /src/forms. Form tests skipped.";
       }
     } else {
       skipped = true;
@@ -1583,6 +1732,19 @@ async function main() {
       formIndex: "",
       message:
         "Preflight failed: src/content.config.ts is required for Astro v6 form discovery.",
+    });
+  }
+  const invalidConfigFailures = preflight.alerts.filter(
+    (entry) => entry?.type === "invalid-content-config-forms-base",
+  ).length;
+  if (invalidConfigFailures > 0) {
+    preflightFailed += invalidConfigFailures;
+    issues.push({
+      type: "preflight",
+      pageUrl: "",
+      formIndex: "",
+      message:
+        "Preflight failed: content collections config must resolve forms from /src/forms.",
     });
   }
   const testCases = buildTestCases({

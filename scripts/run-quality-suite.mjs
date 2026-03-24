@@ -225,7 +225,12 @@ function hasLegacyFormsFolder(projectRoot = process.cwd()) {
 async function promptForFormMigrationIfNeeded(selectedChecks) {
   if (!selectedChecks?.form) return "prompt";
   if (!hasLegacyFormsFolder(process.cwd())) return "prompt";
-  if (!process.stdin.isTTY || !process.stdout.isTTY) return "no";
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.log(
+      "ℹ️  Legacy forms detected and terminal is non-interactive. Auto-migrating to src/forms for form tests.",
+    );
+    return "yes";
+  }
 
   const { migrateLegacyForms } = await inquirer.prompt([
     {

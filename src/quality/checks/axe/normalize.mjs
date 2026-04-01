@@ -11,13 +11,23 @@ export function normalizeAxePayload(raw, options = {}) {
     stats && typeof stats === "object"
       ? toNumber(stats.violationCount)
       : issues.reduce((sum, issue) => sum + toNumber(issue?.violationCount), 0);
+  const executionFailures = [];
   const pageSummaries = results.map((entry, index) => {
     const url = String(entry?.url || "").trim();
     const violationCount = toNumber(entry?.violationCount);
     const incompleteCount = toNumber(entry?.incompleteCount);
-    const status = violationCount > 0 ? "failed" : "passed";
+    const exitCode = toNumber(entry?.exitCode);
+    const rawStatus = String(entry?.status || "").toLowerCase();
+    const status =
+      rawStatus ||
+      (exitCode !== 0 ? "failed" : violationCount > 0 ? "failed" : "passed");
     const violations = Array.isArray(entry?.violations) ? entry.violations : [];
-    return {
+    const message =
+      String(entry?.message || "").trim() ||
+      (status === "failed" && violationCount === 0
+        ? `aXe CLI failed${exitCode ? ` (exit ${exitCode})` : ""}.`
+        : "");
+    const pageSummary = {
       name: `${String(index + 1).padStart(4, "0")}.html`,
       label: url || `Page ${index + 1}`,
       url,
@@ -25,14 +35,21 @@ export function normalizeAxePayload(raw, options = {}) {
       warnings: incompleteCount,
       violationCount,
       incompleteCount,
+      exitCode,
       status,
+      message,
       violations,
     };
+    if (status === "failed" && violationCount === 0) {
+      executionFailures.push(pageSummary);
+    }
+    return pageSummary;
   });
 
   return {
     selected: options.selected !== false,
-    failed: Boolean(options.failed) || violations > 0,
+    failed:
+      Boolean(options.failed) || violations > 0 || executionFailures.length > 0,
     stats,
     issues,
     meta: {
@@ -43,6 +60,7 @@ export function normalizeAxePayload(raw, options = {}) {
       summaryMdPath: raw?.summaryMdPath || null,
       results,
       resultsCount: results.length,
+      executionFailures,
       pageSummaries,
     },
   };

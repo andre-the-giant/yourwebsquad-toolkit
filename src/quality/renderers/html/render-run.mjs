@@ -266,12 +266,14 @@ function pa11yDetailsHtml(check = {}) {
 }
 
 function axeOverviewPillsHtml(stats = {}) {
-  const selected = {
-    pagesTested: stats?.pagesTested,
-    failedPages: stats?.failedPages,
-    violationCount: stats?.violationCount,
-  };
-  return overviewPillsHtml(selected, { excludeKeys: [] });
+  const pagesTested = Number(stats?.pagesTested || 0);
+  const failedPages = Number(stats?.failedPages || 0);
+  const violationCount = Number(stats?.violationCount || 0);
+  return `<div class="pill-row">
+    ${statusPillHtml(`Pages tested: ${pagesTested}`, "info")}
+    ${statusPillHtml(`Execution failures: ${failedPages}`, failedPages > 0 ? "fail" : "pass")}
+    ${statusPillHtml(`Violations: ${violationCount}`, violationCount > 0 ? "fail" : "pass")}
+  </div>`;
 }
 
 function axePageReportsTableHtml(check = {}) {
@@ -285,9 +287,16 @@ function axePageReportsTableHtml(check = {}) {
     .slice(0, 300)
     .map((page) => {
       const violations = Number(page?.violationCount || page?.errors || 0);
+      const executionFailed =
+        String(page?.status || "").toLowerCase() === "failed" &&
+        violations === 0;
       const status = statusPillHtml(
-        violations > 0 ? `${violations} violation(s)` : "No issue",
-        violations > 0 ? "fail" : "pass",
+        executionFailed
+          ? "Execution failed"
+          : violations > 0
+            ? `${violations} violation(s)`
+            : "No issue",
+        executionFailed || violations > 0 ? "fail" : "pass",
       );
       const linkCell = page?.name
         ? `<a class="report-link-btn" href="./axe/pages/${escapeContent(page.name)}">Open</a>`
@@ -313,9 +322,32 @@ function axePageReportsTableHtml(check = {}) {
 function axeDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
+  const executionFailures = Array.isArray(check?.meta?.executionFailures)
+    ? check.meta.executionFailures
+    : [];
+  const executionRows = executionFailures
+    .map(
+      (page) => `<tr>
+        <td>${escapeContent(page?.url || "-")}</td>
+        <td>${escapeContent(page?.exitCode ?? "-")}</td>
+        <td>${escapeContent(page?.message || "aXe scan failed before reporting violations.")}</td>
+      </tr>`,
+    )
+    .join("");
   return `<section class="check-card">
     <h2>aXe Overview</h2>
     ${axeOverviewPillsHtml(stats)}
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Execution Failures</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>URL</th><th>Exit</th><th>Message</th></tr>
+        </thead>
+        <tbody>${executionRows || '<tr><td colspan="3">No execution failures.</td></tr>'}</tbody>
+      </table>
+    </div>
   </section>
   <section class="check-card spacer-top">
     <h2>Page Reports</h2>
@@ -401,6 +433,18 @@ function formDetailsHtml(check = {}) {
       const apiValid = pickFormCaseStatus(relatedCases, "api-valid");
       const apiInvalid = pickFormCaseStatus(relatedCases, "api-invalid");
       const a11y = pickFormCaseStatus(relatedCases, "a11y");
+      const detailText = relatedCases
+        .filter(
+          (entry) =>
+            !["pass", "info"].includes(
+              String(entry?.status || "").toLowerCase(),
+            ),
+        )
+        .map(
+          (entry) =>
+            `${String(entry?.testType || "-")}: ${String(entry?.message || "-")}`,
+        )
+        .join(" | ");
       return `<tr>
         <td>${escapeContent(pageUrl || "-")}</td>
         <td>${escapeContent(String(form?.id || "-"))}</td>
@@ -411,8 +455,24 @@ function formDetailsHtml(check = {}) {
         <td>${formStatusPill(apiValid)}</td>
         <td>${formStatusPill(apiInvalid)}</td>
         <td>${formStatusPill(a11y)}</td>
+        <td>${escapeContent(detailText || "-")}</td>
       </tr>`;
     })
+    .join("");
+  const issueRows = testCases
+    .filter(
+      (entry) =>
+        !["pass", "info"].includes(String(entry?.status || "").toLowerCase()),
+    )
+    .map(
+      (entry) => `<tr>
+        <td>${escapeContent(String(entry?.pageUrl || "-"))}</td>
+        <td>${escapeContent(String(entry?.formIndex ?? "-"))}</td>
+        <td>${escapeContent(String(entry?.testType || "-"))}</td>
+        <td>${formStatusPill(entry?.status)}</td>
+        <td>${escapeContent(String(entry?.message || "-"))}</td>
+      </tr>`,
+    )
     .join("");
 
   const legacyRefsNotice = Array.isArray(preflight?.notices)
@@ -448,9 +508,20 @@ function formDetailsHtml(check = {}) {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Page</th><th>Form ID</th><th>Index</th><th>Action</th><th>Method</th><th>Frontend</th><th>API valid</th><th>API invalid</th><th>a11y</th></tr>
+          <tr><th>Page</th><th>Form ID</th><th>Index</th><th>Action</th><th>Method</th><th>Frontend</th><th>API valid</th><th>API invalid</th><th>a11y</th><th>Details</th></tr>
         </thead>
-        <tbody>${rows || '<tr><td colspan="9">No forms were detected for this run.</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="10">No forms were detected for this run.</td></tr>'}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="check-card spacer-top">
+    <h2>Failed Checks</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Page</th><th>Form</th><th>Test</th><th>Status</th><th>Message</th></tr>
+        </thead>
+        <tbody>${issueRows || '<tr><td colspan="5">No failed checks.</td></tr>'}</tbody>
       </table>
     </div>
   </section>`;
@@ -458,6 +529,9 @@ function formDetailsHtml(check = {}) {
 
 function axePageDetailHtml(page = {}, runBasePath = "", subtitle = "") {
   const violations = Array.isArray(page?.violations) ? page.violations : [];
+  const executionFailed =
+    String(page?.status || "").toLowerCase() === "failed" &&
+    Number(page?.violationCount || 0) === 0;
   const rows = violations
     .map(
       (entry) => `<tr>
@@ -479,8 +553,17 @@ function axePageDetailHtml(page = {}, runBasePath = "", subtitle = "") {
       <div class="pill-row">
         ${statusPillHtml(`Violations: ${Number(page?.violationCount || 0)}`, Number(page?.violationCount || 0) > 0 ? "fail" : "pass")}
         ${statusPillHtml(`Incomplete: ${Number(page?.incompleteCount || 0)}`, "info")}
+        ${executionFailed ? statusPillHtml(`Execution failed${page?.exitCode ? `: ${page.exitCode}` : ""}`, "fail") : ""}
       </div>
     </section>
+    ${
+      executionFailed
+        ? `<section class="check-card spacer-top">
+      <h2>Failure</h2>
+      <p>${escapeContent(page?.message || "aXe scan failed before reporting violations.")}</p>
+    </section>`
+        : ""
+    }
     <section class="check-card spacer-top">
       <h2>Violations</h2>
       <div class="table-wrap">
@@ -529,6 +612,52 @@ function seoDetailsHtml(check = {}) {
     <h2>Page Reports</h2>
     ${pageReportsTableHtml("seo", check)}
   </section>`;
+}
+
+function vnuPageDetailHtml(page = {}, runBasePath = "", subtitle = "") {
+  const issues = Array.isArray(page?.issues) ? page.issues : [];
+  const rows = issues
+    .map((issue) => {
+      const severity = String(issue?.severity || "-").toLowerCase();
+      const tone =
+        severity === "error"
+          ? "fail"
+          : severity === "warning"
+            ? "warn"
+            : "info";
+      return `<tr>
+        <td>${statusPillHtml(severity === "-" ? "-" : severity, tone)}</td>
+        <td>${escapeContent(issue?.line ?? "-")}</td>
+        <td>${escapeContent(issue?.column ?? "-")}</td>
+        <td>${escapeContent(issue?.message || "-")}</td>
+      </tr>`;
+    })
+    .join("");
+  return renderLayout({
+    title: "Nu HTML Checker page report",
+    subtitle,
+    navHtml: navHtml(runBasePath, ["vnu"]),
+    stylesheetHref: `${runBasePath}/report.css`,
+    bodyHtml: `<section class="check-card">
+      <h2>Nu HTML Checker Page Report</h2>
+      <p class="muted">${escapeContent(page?.url || page?.label || "-")}</p>
+      <div class="pill-row">
+        ${statusPillHtml(`Errors: ${Number(page?.errors || 0)}`, Number(page?.errors || 0) > 0 ? "fail" : "pass")}
+        ${statusPillHtml(`Warnings: ${Number(page?.warnings || 0)}`, Number(page?.warnings || 0) > 0 ? "warn" : "pass")}
+      </div>
+    </section>
+    <section class="check-card spacer-top">
+      <h2>Issues</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Severity</th><th>Line</th><th>Column</th><th>Message</th></tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="4">No issues.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>`,
+  });
 }
 
 function linksDetailsHtml(check = {}) {
@@ -794,41 +923,20 @@ function sitespeedDetailsHtml(check = {}) {
 function vnuDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
-  const issues = Array.isArray(check?.issues) ? check.issues : [];
-  const issueRows = issues
-    .slice(0, 80)
-    .map((issue) => {
-      const severity = String(issue?.severity || "-").toLowerCase();
-      const tone =
-        severity === "error"
-          ? "fail"
-          : severity === "warning"
-            ? "warn"
-            : "info";
-      return `<tr>
-        <td>${statusPillHtml(severity === "-" ? "-" : severity, tone)}</td>
-        <td>${escapeContent(issue?.url || "-")}</td>
-        <td>${escapeContent(issue?.line ?? "-")}</td>
-        <td>${escapeContent(issue?.column ?? "-")}</td>
-        <td>${escapeContent(issue?.message || "-")}</td>
-      </tr>`;
-    })
-    .join("");
+  const selected = {
+    urlsTested: stats?.urlsTested,
+    pagesWithIssues: stats?.pagesWithIssues,
+    errorCount: stats?.errorCount,
+    warningCount: stats?.warningCount,
+  };
 
   return `<section class="check-card">
     <h2>Nu HTML Checker Overview</h2>
-    ${overviewPillsHtml(stats)}
+    ${overviewPillsHtml(selected)}
   </section>
   <section class="check-card spacer-top">
-    <h2>Validation Issues</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th>Severity</th><th>URL</th><th>Line</th><th>Column</th><th>Message</th></tr>
-        </thead>
-        <tbody>${issueRows || '<tr><td colspan="5">No issues</td></tr>'}</tbody>
-      </table>
-    </div>
+    <h2>Page Reports</h2>
+    ${pageReportsTableHtml("vnu", check)}
   </section>`;
 }
 
@@ -1131,6 +1239,15 @@ export function renderHtmlRun({ cwd = process.cwd(), runId, dataset }) {
           check.meta.reportHtmlPath,
           path.join(outDir, "vnu", "report.html"),
         );
+      }
+      const vnuPages = Array.isArray(check?.meta?.pageSummaries)
+        ? check.meta.pageSummaries
+        : [];
+      for (let i = 0; i < vnuPages.length; i += 1) {
+        const page = vnuPages[i];
+        const name = page?.name || `${String(i + 1).padStart(4, "0")}.html`;
+        const html = vnuPageDetailHtml(page, runBasePath, subtitle);
+        writeText(path.join(outDir, "vnu", "pages", name), html);
       }
     }
 

@@ -30,6 +30,13 @@ function statusForCheck(checkId, check = {}) {
       return { label: "Issues found", tone: "fail" };
     if (checkId === "vnu")
       return { label: "Markup errors found", tone: "fail" };
+    if (
+      checkId === "axe" &&
+      asNumber(stats.violationCount) === 0 &&
+      asNumber(stats.failedPages) > 0
+    ) {
+      return { label: "Accessibility scan failures found", tone: "fail" };
+    }
     if (checkId === "axe")
       return { label: "Accessibility issues found", tone: "fail" };
     if (checkId === "form") return { label: "Form issues found", tone: "fail" };

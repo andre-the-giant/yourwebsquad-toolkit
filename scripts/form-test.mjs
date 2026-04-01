@@ -1171,99 +1171,106 @@ async function runFormA11yProbes(
 ) {
   const results = [];
   const list = Array.isArray(forms) ? forms : [];
-  for (const form of list) {
-    const pageUrl = normalizeUrl(form?.pageUrl);
-    const formIndex = Number(form?.formIndex ?? 0);
-    const formId = String(form?.id || "").trim();
-    if (!pageUrl) {
-      results.push({
-        pageUrl: "",
-        formIndex,
-        formId,
-        selector: "",
-        exitCode: null,
-        violationCount: 0,
-        success: false,
-        status: "error",
-        outputPath: "",
-        message: "Missing page URL for form a11y probe.",
-      });
-      continue;
-    }
-    if (!formId) {
+  const axeSourcePath = path.join(
+    process.cwd(),
+    "node_modules/axe-core/axe.min.js",
+  );
+  const browser = await puppeteer.launch({ headless: "new" });
+  const page = await browser.newPage();
+  try {
+    for (const form of list) {
+      const pageUrl = normalizeUrl(form?.pageUrl);
+      const formIndex = Number(form?.formIndex ?? 0);
+      const formId = String(form?.id || "").trim();
+      if (!pageUrl) {
+        results.push({
+          pageUrl: "",
+          formIndex,
+          formId,
+          selector: "",
+          exitCode: null,
+          violationCount: 0,
+          success: false,
+          status: "error",
+          outputPath: "",
+          message: "Missing page URL for form a11y probe.",
+        });
+        continue;
+      }
+      if (!formId) {
+        results.push({
+          pageUrl,
+          formIndex,
+          formId: "",
+          selector: "",
+          exitCode: null,
+          violationCount: 0,
+          success: true,
+          status: "skipped",
+          outputPath: "",
+          message: "Skipped form-only a11y: missing form id attribute.",
+        });
+        continue;
+      }
+
+      const selector = `form#${formId.replace(/([ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1")}`;
+      const outName = `form-a11y-${slugify(pageUrl) || "page"}-${slugify(formId) || String(formIndex)}.json`;
+      const outPath = path.join(reportDir, outName);
+      let payload = null;
+      let exitCode = 0;
+      let errorMessage = "";
+      try {
+        await page.goto(pageUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 30000,
+        });
+        await page.addScriptTag({ path: axeSourcePath });
+        payload = await page.evaluate(async (targetSelector) => {
+          return await globalThis.axe.run(document, {
+            runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+            include: [[targetSelector]],
+          });
+        }, selector);
+        fs.writeFileSync(
+          outPath,
+          `${JSON.stringify(payload, null, 2)}\n`,
+          "utf8",
+        );
+      } catch (error) {
+        exitCode = 1;
+        errorMessage = error?.message || String(error);
+        if (!quiet) {
+          console.error(
+            `Form a11y probe failed for ${pageUrl} ${selector}: ${errorMessage}`,
+          );
+        }
+      }
+      const violations = Array.isArray(payload?.violations)
+        ? payload.violations
+        : [];
+      const status =
+        exitCode === 0 ? (violations.length === 0 ? "pass" : "fail") : "error";
       results.push({
         pageUrl,
         formIndex,
-        formId: "",
-        selector: "",
-        exitCode: null,
-        violationCount: 0,
-        success: true,
-        status: "skipped",
-        outputPath: "",
-        message: "Skipped form-only a11y: missing form id attribute.",
+        formId,
+        selector,
+        exitCode,
+        violationCount: violations.length,
+        success: status === "pass",
+        status,
+        outputPath: outPath,
+        message:
+          status === "pass"
+            ? "No violations in selected form scope."
+            : status === "fail"
+              ? `Found ${violations.length} violation(s) in selected form scope.`
+              : errorMessage || "aXe command failed for selected form scope.",
       });
-      continue;
     }
-
-    const selector = `form#${formId.replace(/([ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1")}`;
-    const outName = `form-a11y-${slugify(pageUrl) || "page"}-${slugify(formId) || String(formIndex)}.json`;
-    const args = [
-      "axe",
-      pageUrl,
-      "--include",
-      selector,
-      "--tags",
-      "wcag2a,wcag2aa",
-      "--dir",
-      reportDir,
-      "--save",
-      outName,
-      "--show-errors",
-      "false",
-    ];
-    const exitCode = await new Promise((resolve) => {
-      const child = spawn("npx", args, {
-        shell: false,
-        stdio: quiet ? "ignore" : "inherit",
-        env: process.env,
-      });
-      child.on("exit", (code) => resolve(code ?? 1));
-      child.on("error", () => resolve(1));
-    });
-
-    const outPath = path.join(reportDir, outName);
-    let payload = null;
-    if (fs.existsSync(outPath)) {
-      try {
-        const parsed = JSON.parse(fs.readFileSync(outPath, "utf8"));
-        payload = Array.isArray(parsed) ? parsed[0] || null : parsed;
-      } catch {
-        payload = null;
-      }
-    }
-    const violations = Array.isArray(payload?.violations)
-      ? payload.violations
-      : [];
-    const status =
-      exitCode === 0 ? (violations.length === 0 ? "pass" : "fail") : "error";
-    results.push({
-      pageUrl,
-      formIndex,
-      formId,
-      selector,
-      exitCode,
-      violationCount: violations.length,
-      success: status === "pass",
-      status,
-      outputPath: outPath,
-      message:
-        status === "pass"
-          ? "No violations in selected form scope."
-          : status === "fail"
-            ? `Found ${violations.length} violation(s) in selected form scope.`
-            : "aXe command failed for selected form scope.",
-    });
+  } finally {
+    await page.close();
+    await browser.close();
   }
   return results;
 }

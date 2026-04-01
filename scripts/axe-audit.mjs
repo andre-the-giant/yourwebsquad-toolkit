@@ -3,9 +3,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { spawn } from "node:child_process";
+import puppeteer from "puppeteer";
 
 const DEFAULT_REPORT_DIR = path.join(process.cwd(), "reports", "axe");
+const AXE_SOURCE_PATH = path.join(
+  process.cwd(),
+  "node_modules/axe-core/axe.min.js",
+);
 
 function parseArgs(argv = []) {
   const options = {};
@@ -125,71 +129,43 @@ function slugify(value) {
     .slice(0, 80);
 }
 
-async function runAxeForUrl(url, { reportDir, quiet = false } = {}) {
+async function runAxeForUrl(page, url, { reportDir, quiet = false } = {}) {
   const safe = slugify(url) || "page";
   const outputFile = `${safe}.axe.json`;
-  const args = [
-    "axe",
-    url,
-    "--tags",
-    "wcag2a,wcag2aa",
-    "--dir",
-    reportDir,
-    "--save",
-    outputFile,
-    "--show-errors",
-    "false",
-  ];
 
   if (!quiet) {
     console.log(`Running aXe: ${url}`);
   }
 
-  const run = await new Promise((resolve) => {
-    const child = spawn("npx", args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: false,
-      env: process.env,
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-      if (!quiet) process.stdout.write(chunk);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-      if (!quiet) process.stderr.write(chunk);
-    });
-    child.on("exit", (code) =>
-      resolve({ exitCode: code ?? 1, stdout, stderr }),
-    );
-    child.on("error", (error) =>
-      resolve({
-        exitCode: 1,
-        stdout,
-        stderr: `${stderr}${error?.message || String(error)}`,
-      }),
-    );
-  });
-
   const outPath = path.join(reportDir, outputFile);
   let payload = null;
-  if (fs.existsSync(outPath)) {
-    try {
-      payload = JSON.parse(fs.readFileSync(outPath, "utf8"));
-    } catch {
-      payload = null;
-    }
+  let exitCode = 0;
+  let stderr = "";
+
+  try {
+    await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
+    });
+    await page.addScriptTag({ path: AXE_SOURCE_PATH });
+    payload = await page.evaluate(async () => {
+      return await globalThis.axe.run(document, {
+        runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+      });
+    });
+    fs.writeFileSync(outPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  } catch (error) {
+    exitCode = 1;
+    stderr = error?.message || String(error);
   }
 
   return {
     url,
-    exitCode: run.exitCode,
+    exitCode,
     outputPath: outPath,
-    stdout: run.stdout || "",
-    stderr: run.stderr || "",
-    payload: Array.isArray(payload) ? payload[0] || null : payload,
+    stdout: "",
+    stderr,
+    payload,
   };
 }
 
@@ -439,12 +415,19 @@ async function main() {
   }
 
   const rawResults = [];
-  for (const url of urls) {
-    const result = await runAxeForUrl(url, {
-      reportDir,
-      quiet: Boolean(args.quiet),
-    });
-    rawResults.push(result);
+  const browser = await puppeteer.launch({ headless: "new" });
+  const page = await browser.newPage();
+  try {
+    for (const url of urls) {
+      const result = await runAxeForUrl(page, url, {
+        reportDir,
+        quiet: Boolean(args.quiet),
+      });
+      rawResults.push(result);
+    }
+  } finally {
+    await page.close();
+    await browser.close();
   }
   const pageResults = rawResults.map(normalizeAxePageResult);
   const issues = flattenIssues(pageResults);

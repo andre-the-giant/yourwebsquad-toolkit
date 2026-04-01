@@ -320,7 +320,13 @@ function axePageReportsTableHtml(check = {}) {
 }
 
 function axeDetailsHtml(check = {}) {
+  const stats =
+    check?.stats && typeof check.stats === "object" ? check.stats : {};
   return `<section class="check-card">
+    <h2>aXe Overview</h2>
+    ${axeOverviewPillsHtml(stats)}
+  </section>
+  <section class="check-card spacer-top">
     <h2>Page Reports</h2>
     ${axePageReportsTableHtml(check)}
   </section>`;

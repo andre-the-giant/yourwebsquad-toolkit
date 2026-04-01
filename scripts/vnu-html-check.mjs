@@ -178,6 +178,24 @@ function collectHtmlFiles(dirPath) {
   return out;
 }
 
+function mapUrlToBuildFile(url, { baseUrl, sourceDir }) {
+  try {
+    const root = new URL(baseUrl);
+    const target = new URL(url, root);
+    if (target.origin !== root.origin) return null;
+    let pathname = decodeURIComponent(target.pathname || "/");
+    if (!pathname.startsWith("/")) pathname = `/${pathname}`;
+    const relativePath =
+      pathname === "/"
+        ? "index.html"
+        : path.join(pathname.replace(/^\/+/, ""), "index.html");
+    const filePath = path.join(sourceDir, relativePath);
+    return fs.existsSync(filePath) ? filePath : null;
+  } catch {
+    return null;
+  }
+}
+
 function toReportUrl(rawUrl, { baseUrl, sourceDir }) {
   const value = String(rawUrl || "");
   if (!value.startsWith("file:")) return value || null;
@@ -266,21 +284,29 @@ async function main() {
   const reportDir = args.reportDir || DEFAULT_REPORT_DIR;
   const quiet = Boolean(args.quiet);
   const sourceDir = args.sourceDir ? path.resolve(args.sourceDir) : null;
-  const urls = sourceDir
-    ? []
-    : args.urlsFile
-      ? loadUrlsFromFile(args.urlsFile, baseUrl)
-      : [baseUrl];
+  const urls = args.urlsFile
+    ? loadUrlsFromFile(args.urlsFile, baseUrl)
+    : [baseUrl];
   const htmlFiles = sourceDir ? collectHtmlFiles(sourceDir) : [];
+  const selectedHtmlFiles =
+    sourceDir && urls.length
+      ? urls
+          .map((url) => mapUrlToBuildFile(url, { baseUrl, sourceDir }))
+          .filter(Boolean)
+      : [];
 
-  if (!urls.length && !htmlFiles.length) {
+  if (!urls.length && !htmlFiles.length && !selectedHtmlFiles.length) {
     console.error("No URLs or source files provided for Nu HTML Checker.");
     process.exit(1);
   }
 
   ensureCleanDir(reportDir);
 
-  const targets = sourceDir ? [sourceDir] : urls;
+  const targets = sourceDir
+    ? selectedHtmlFiles.length
+      ? selectedHtmlFiles
+      : htmlFiles
+    : urls;
   const cmdArgs = [
     "--yes",
     "vnu-jar",
@@ -316,10 +342,16 @@ async function main() {
     (issue) => issue.severity === "warning",
   ).length;
   const infoCount = issues.filter((issue) => issue.severity === "info").length;
-  const pagesWithIssues = uniqueCount(issues.map((issue) => issue.url));
+  const pagesWithIssues = uniqueCount(
+    issues
+      .filter(
+        (issue) => issue.severity === "error" || issue.severity === "warning",
+      )
+      .map((issue) => issue.url),
+  );
 
   const stats = {
-    urlsTested: sourceDir ? htmlFiles.length : urls.length,
+    urlsTested: sourceDir ? targets.length : urls.length,
     pagesWithIssues,
     messagesIgnored: allMessages.length - messages.length,
     messagesTotal: issues.length,

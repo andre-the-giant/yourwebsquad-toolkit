@@ -320,36 +320,7 @@ function axePageReportsTableHtml(check = {}) {
 }
 
 function axeDetailsHtml(check = {}) {
-  const stats =
-    check?.stats && typeof check.stats === "object" ? check.stats : {};
-  const executionFailures = Array.isArray(check?.meta?.executionFailures)
-    ? check.meta.executionFailures
-    : [];
-  const executionRows = executionFailures
-    .map(
-      (page) => `<tr>
-        <td>${escapeContent(page?.url || "-")}</td>
-        <td>${escapeContent(page?.exitCode ?? "-")}</td>
-        <td>${escapeContent(page?.message || "aXe scan failed before reporting violations.")}</td>
-      </tr>`,
-    )
-    .join("");
   return `<section class="check-card">
-    <h2>aXe Overview</h2>
-    ${axeOverviewPillsHtml(stats)}
-  </section>
-  <section class="check-card spacer-top">
-    <h2>Execution Failures</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th>URL</th><th>Exit</th><th>Message</th></tr>
-        </thead>
-        <tbody>${executionRows || '<tr><td colspan="3">No execution failures.</td></tr>'}</tbody>
-      </table>
-    </div>
-  </section>
-  <section class="check-card spacer-top">
     <h2>Page Reports</h2>
     ${axePageReportsTableHtml(check)}
   </section>`;
@@ -459,22 +430,6 @@ function formDetailsHtml(check = {}) {
       </tr>`;
     })
     .join("");
-  const issueRows = testCases
-    .filter(
-      (entry) =>
-        !["pass", "info"].includes(String(entry?.status || "").toLowerCase()),
-    )
-    .map(
-      (entry) => `<tr>
-        <td>${escapeContent(String(entry?.pageUrl || "-"))}</td>
-        <td>${escapeContent(String(entry?.formIndex ?? "-"))}</td>
-        <td>${escapeContent(String(entry?.testType || "-"))}</td>
-        <td>${formStatusPill(entry?.status)}</td>
-        <td>${escapeContent(String(entry?.message || "-"))}</td>
-      </tr>`,
-    )
-    .join("");
-
   const legacyRefsNotice = Array.isArray(preflight?.notices)
     ? preflight.notices
         .map((entry) => String(entry?.message || ""))
@@ -511,17 +466,6 @@ function formDetailsHtml(check = {}) {
           <tr><th>Page</th><th>Form ID</th><th>Index</th><th>Action</th><th>Method</th><th>Frontend</th><th>API valid</th><th>API invalid</th><th>a11y</th><th>Details</th></tr>
         </thead>
         <tbody>${rows || '<tr><td colspan="10">No forms were detected for this run.</td></tr>'}</tbody>
-      </table>
-    </div>
-  </section>
-  <section class="check-card spacer-top">
-    <h2>Failed Checks</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th>Page</th><th>Form</th><th>Test</th><th>Status</th><th>Message</th></tr>
-        </thead>
-        <tbody>${issueRows || '<tr><td colspan="5">No failed checks.</td></tr>'}</tbody>
       </table>
     </div>
   </section>`;
@@ -924,8 +868,6 @@ function vnuDetailsHtml(check = {}) {
   const stats =
     check?.stats && typeof check.stats === "object" ? check.stats : {};
   const selected = {
-    urlsTested: stats?.urlsTested,
-    pagesWithIssues: stats?.pagesWithIssues,
     errorCount: stats?.errorCount,
     warningCount: stats?.warningCount,
   };

@@ -145,14 +145,32 @@ async function runAxeForUrl(url, { reportDir, quiet = false } = {}) {
     console.log(`Running aXe: ${url}`);
   }
 
-  const exitCode = await new Promise((resolve) => {
+  const run = await new Promise((resolve) => {
     const child = spawn("npx", args, {
-      stdio: quiet ? "ignore" : "inherit",
+      stdio: ["ignore", "pipe", "pipe"],
       shell: false,
       env: process.env,
     });
-    child.on("exit", (code) => resolve(code ?? 1));
-    child.on("error", () => resolve(1));
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+      if (!quiet) process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      if (!quiet) process.stderr.write(chunk);
+    });
+    child.on("exit", (code) =>
+      resolve({ exitCode: code ?? 1, stdout, stderr }),
+    );
+    child.on("error", (error) =>
+      resolve({
+        exitCode: 1,
+        stdout,
+        stderr: `${stderr}${error?.message || String(error)}`,
+      }),
+    );
   });
 
   const outPath = path.join(reportDir, outputFile);
@@ -167,8 +185,10 @@ async function runAxeForUrl(url, { reportDir, quiet = false } = {}) {
 
   return {
     url,
-    exitCode,
+    exitCode: run.exitCode,
     outputPath: outPath,
+    stdout: run.stdout || "",
+    stderr: run.stderr || "",
     payload: Array.isArray(payload) ? payload[0] || null : payload,
   };
 }
@@ -192,11 +212,22 @@ function normalizeAxePageResult(raw = {}) {
     : [];
   const passes = Array.isArray(payload.passes) ? payload.passes : [];
 
+  const message =
+    Number(raw.exitCode || 0) === 0
+      ? ""
+      : String(raw.stderr || raw.stdout || "")
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .slice(-2)
+          .join(" ");
+
   return {
     url: raw.url,
     exitCode: Number(raw.exitCode || 0),
     outputPath: raw.outputPath || null,
     status: Number(raw.exitCode || 0) === 0 ? "passed" : "failed",
+    message,
     violationCount: violations.length,
     violationNodeCount: countNodes(violations),
     incompleteCount: incomplete.length,

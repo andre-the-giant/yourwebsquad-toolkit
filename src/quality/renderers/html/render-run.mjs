@@ -487,8 +487,12 @@ function axePageDetailHtml(page = {}, runBasePath = "", subtitle = "") {
       (entry) => `<tr>
       <td>${escapeContent(entry?.id || "-")}</td>
       <td>${escapeContent(entry?.impact || "-")}</td>
-      <td>${escapeContent(entry?.nodeCount ?? 0)}</td>
-      <td><a href="${escapeContent(entry?.helpUrl || "#")}" target="_blank" rel="noreferrer">${escapeContent(entry?.help || "-")}</a></td>
+      <td>${escapeContent(entry?.help || "-")}</td>
+      <td>${
+        entry?.helpUrl
+          ? `<a href="${escapeContent(entry.helpUrl)}" target="_blank" rel="noreferrer">Details</a>`
+          : `<span class="muted">-</span>`
+      }</td>
     </tr>`,
     )
     .join("");
@@ -519,7 +523,7 @@ function axePageDetailHtml(page = {}, runBasePath = "", subtitle = "") {
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Rule</th><th>Impact</th><th>Nodes</th><th>Help</th></tr>
+            <tr><th>Rule</th><th>Impact</th><th>Reason</th><th>Details</th></tr>
           </thead>
           <tbody>${rows || '<tr><td colspan="4">No violations.</td></tr>'}</tbody>
         </table>

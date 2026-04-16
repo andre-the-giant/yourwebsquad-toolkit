@@ -1576,7 +1576,16 @@ async function main() {
     };
 
     checkRunners.vnu = async () => {
-      const vnuArgs = ["--base", baseUrl, "--urls-file", urlsFile];
+      const vnuArgs = selectedTarget.usesLocalBuild
+        ? [
+            "--source-dir",
+            path.join(process.cwd(), "build"),
+            "--base",
+            baseUrl,
+            "--urls-file",
+            urlsFile,
+          ]
+        : ["--base", baseUrl, "--urls-file", urlsFile];
       const result = await runCommand(
         "node",
         [

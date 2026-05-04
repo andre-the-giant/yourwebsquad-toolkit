@@ -41,6 +41,11 @@ export function reportNavLinks({ basePath = "", selectedChecks = [] } = {}) {
       href: joinBase(basePath, "sitespeed.html"),
     },
     { key: "vnu", label: "Nu HTML", href: joinBase(basePath, "vnu.html") },
+    {
+      key: "wappalyzer",
+      label: "Stack",
+      href: joinBase(basePath, "wappalyzer.html"),
+    },
   ];
   if (!selected.size) {
     return nav.concat(checkLinks);

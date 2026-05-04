@@ -41,5 +41,8 @@
     "serve": "^14.2.5",
     "typescript": "^5.9.3",
     "wait-on": "^9.0.3"
+  },
+  "optionalDependencies": {
+    "simple-wappalyzer": "^1.1.97"
   }
 }

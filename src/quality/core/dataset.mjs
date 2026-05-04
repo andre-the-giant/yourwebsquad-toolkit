@@ -19,6 +19,8 @@ import { collectSitespeedFromReportDir } from "../checks/sitespeed/collect.mjs";
 import { normalizeSitespeedPayload } from "../checks/sitespeed/normalize.mjs";
 import { collectVnuFromReportDir } from "../checks/vnu/collect.mjs";
 import { normalizeVnuPayload } from "../checks/vnu/normalize.mjs";
+import { collectWappalyzerFromReportDir } from "../checks/wappalyzer/collect.mjs";
+import { normalizeWappalyzerPayload } from "../checks/wappalyzer/normalize.mjs";
 
 const CHECK_KEYS = [
   "lighthouse",
@@ -31,6 +33,7 @@ const CHECK_KEYS = [
   "security",
   "sitespeed",
   "vnu",
+  "wappalyzer",
 ];
 
 export function selectedCheckIds(selectedChecks) {
@@ -50,6 +53,7 @@ function checkFailedMap(failures = []) {
     security: failedSet.has("Security audit"),
     sitespeed: failedSet.has("Sitespeed.io"),
     vnu: failedSet.has("Nu HTML Checker (vnu)"),
+    wappalyzer: failedSet.has("Wappalyzer stack detection"),
   };
 }
 
@@ -163,6 +167,18 @@ export function buildCanonicalDataset({
     checks.vnu = normalizeVnuPayload(raw, {
       selected: true,
       failed: failed.vnu,
+    });
+  }
+  if (selectedChecks?.wappalyzer) {
+    const raw = collectWappalyzerFromReportDir(
+      path.join(reportRoot, "wappalyzer"),
+      {
+        logPath: path.join(logRoot, "wappalyzer.log"),
+      },
+    );
+    checks.wappalyzer = normalizeWappalyzerPayload(raw, {
+      selected: true,
+      failed: failed.wappalyzer,
     });
   }
 

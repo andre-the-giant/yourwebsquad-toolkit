@@ -8,6 +8,7 @@ import { securityCheck } from "./security/index.mjs";
 import { seoCheck } from "./seo/index.mjs";
 import { sitespeedCheck } from "./sitespeed/index.mjs";
 import { vnuCheck } from "./vnu/index.mjs";
+import { wappalyzerCheck } from "./wappalyzer/index.mjs";
 import {
   clearQualityCheckRegistry,
   getQualityCheck,
@@ -26,6 +27,7 @@ const DEFAULT_CHECKS = [
   securityCheck,
   sitespeedCheck,
   vnuCheck,
+  wappalyzerCheck,
 ];
 
 export function registerDefaultQualityChecks({ reset = false } = {}) {

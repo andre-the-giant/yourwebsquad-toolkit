@@ -13,6 +13,7 @@ const CHECK_IDS = [
   "security",
   "sitespeed",
   "vnu",
+  "wappalyzer",
 ];
 
 function asArray(value) {

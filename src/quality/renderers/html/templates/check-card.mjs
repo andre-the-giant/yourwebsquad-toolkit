@@ -17,6 +17,7 @@ function friendlyCheckName(checkId) {
     security: "Security",
     sitespeed: "Sitespeed.io",
     vnu: "Nu HTML Checker",
+    wappalyzer: "Technology Stack",
   };
   return map[checkId] || checkId;
 }
@@ -30,6 +31,8 @@ function statusForCheck(checkId, check = {}) {
       return { label: "Issues found", tone: "fail" };
     if (checkId === "vnu")
       return { label: "Markup errors found", tone: "fail" };
+    if (checkId === "wappalyzer")
+      return { label: "Detection failures found", tone: "fail" };
     if (
       checkId === "axe" &&
       asNumber(stats.violationCount) === 0 &&
@@ -43,6 +46,13 @@ function statusForCheck(checkId, check = {}) {
     return { label: "Needs attention", tone: "fail" };
   }
   const warningCount = asNumber(stats.warningCount);
+  if (checkId === "wappalyzer") {
+    const count = asNumber(stats.technologiesDetected);
+    return {
+      label: count ? `${count} technologies detected` : "No stack detected",
+      tone: count ? "pass" : "info",
+    };
+  }
   if (warningCount > 0) {
     return { label: `${warningCount} warnings`, tone: "warn" };
   }

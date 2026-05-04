@@ -56,6 +56,9 @@ import { summarizeSitespeedPayload } from "../src/quality/checks/sitespeed/summa
 import { collectVnuFromReportDir } from "../src/quality/checks/vnu/collect.mjs";
 import { normalizeVnuPayload } from "../src/quality/checks/vnu/normalize.mjs";
 import { summarizeVnuPayload } from "../src/quality/checks/vnu/summarize.mjs";
+import { collectWappalyzerFromReportDir } from "../src/quality/checks/wappalyzer/collect.mjs";
+import { normalizeWappalyzerPayload } from "../src/quality/checks/wappalyzer/normalize.mjs";
+import { summarizeWappalyzerPayload } from "../src/quality/checks/wappalyzer/summarize.mjs";
 
 function npmArgvIncludes(flag) {
   try {
@@ -157,7 +160,9 @@ const CHECK_KEYS = [
   "security",
   "sitespeed",
   "vnu",
+  "wappalyzer",
 ];
+const OPTIONAL_BY_DEFAULT_CHECKS = new Set(["wappalyzer"]);
 const CHECK_NAME_BY_ID = {
   lighthouse: "Lighthouse",
   pa11y: "Pa11y",
@@ -169,6 +174,7 @@ const CHECK_NAME_BY_ID = {
   security: "Security audit",
   sitespeed: "Sitespeed.io",
   vnu: "Nu HTML Checker (vnu)",
+  wappalyzer: "Wappalyzer stack detection",
 };
 
 function checksToFlags(selectedValues = []) {
@@ -190,6 +196,7 @@ function checksToFlags(selectedValues = []) {
     security: selectedSet.has("security"),
     sitespeed: selectedSet.has("sitespeed"),
     vnu: selectedSet.has("vnu"),
+    wappalyzer: selectedSet.has("wappalyzer"),
   };
 }
 
@@ -215,6 +222,7 @@ function buildCheckAvailability(selectedTarget) {
         },
     sitespeed: { enabled: true },
     vnu: { enabled: true },
+    wappalyzer: { enabled: true },
   };
 }
 
@@ -272,7 +280,10 @@ async function promptForChecks(selectedTarget) {
     return { name: checkDisplayName(checkId), value: checkId };
   });
   const defaultValues = choices
-    .filter((choice) => !choice.disabled)
+    .filter(
+      (choice) =>
+        !choice.disabled && !OPTIONAL_BY_DEFAULT_CHECKS.has(choice.value),
+    )
     .map((choice) => choice.value);
 
   const { selected } = await inquirer.prompt([
@@ -466,6 +477,11 @@ function collectRawSources() {
       name: "sitespeed",
     },
     { checkId: "vnu", path: path.join(REPORT_ROOT, "vnu"), name: "vnu" },
+    {
+      checkId: "wappalyzer",
+      path: path.join(REPORT_ROOT, "wappalyzer"),
+      name: "wappalyzer",
+    },
   ];
   for (const entry of direct) {
     if (fs.existsSync(entry.path)) {
@@ -754,6 +770,7 @@ function ensureCleanReports() {
     "security",
     "sitespeed",
     "vnu",
+    "wappalyzer",
   ]) {
     const full = path.join(REPORT_ROOT, target);
     if (fs.existsSync(full)) {
@@ -1610,6 +1627,39 @@ async function main() {
         failed: Boolean(result?.exitCode && result.exitCode !== 0),
       });
       return summarizeVnuPayload(normalized);
+    };
+
+    checkRunners.wappalyzer = async () => {
+      const result = await runCommand(
+        "node",
+        [
+          toolkitScriptPath("wappalyzer-audit.mjs"),
+          "--base",
+          baseUrl,
+          "--urls-file",
+          urlsFile,
+          "--report-dir",
+          path.join(REPORT_ROOT, "wappalyzer"),
+          QUIET_MODE ? "--quiet" : "",
+        ].filter(Boolean),
+        {
+          label: "Wappalyzer stack detection",
+          logName: "wappalyzer",
+          allowFailure: true,
+          forceLog: true,
+        },
+      );
+      const raw = collectWappalyzerFromReportDir(
+        path.join(REPORT_ROOT, "wappalyzer"),
+        {
+          logPath: result?.logPath,
+        },
+      );
+      const normalized = normalizeWappalyzerPayload(raw, {
+        selected: true,
+        failed: Boolean(result?.exitCode && result.exitCode !== 0),
+      });
+      return summarizeWappalyzerPayload(normalized);
     };
 
     const createdAt = new Date().toISOString();

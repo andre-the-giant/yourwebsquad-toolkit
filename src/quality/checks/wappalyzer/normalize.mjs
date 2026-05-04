@@ -12,9 +12,7 @@ function categoryNamesFor(technology) {
 }
 
 export function normalizeWappalyzerPayload(raw, options = {}) {
-  const technologies = Array.isArray(raw?.technologies)
-    ? raw.technologies
-    : [];
+  const technologies = Array.isArray(raw?.technologies) ? raw.technologies : [];
   const pages = Array.isArray(raw?.pages) ? raw.pages : [];
   const errors = Array.isArray(raw?.errors) ? raw.errors : [];
   const categoryNames = new Set();
@@ -30,7 +28,8 @@ export function normalizeWappalyzerPayload(raw, options = {}) {
   const technologiesDetected = toNumber(
     stats.technologiesDetected || technologies.length,
   );
-  const failed = Boolean(options.failed) || (pagesTested > 0 && pagesFailed >= pagesTested);
+  const failed =
+    Boolean(options.failed) || (pagesTested > 0 && pagesFailed >= pagesTested);
 
   return {
     selected: options.selected !== false,

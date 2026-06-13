@@ -43,7 +43,7 @@ const defaultLocation =
 const primaryPhone =
   contact.telephones?.find((t) => t.isPrimary)?.short ||
   contact.telephones?.[0]?.short ||
-  "+33 2 31 00 00 00";
+  "";
 const sameAs = (social.links || []).map((link) => link.url).filter(Boolean);
 const jsonLd = buildJsonLd({
   locale,

@@ -368,7 +368,7 @@ function buildSeoJson(locale, title, description) {
     seo: {
       title,
       description,
-      image: "/assets/og/storefront.jpg",
+      image: "/assets/og/default.png",
     },
   };
 }

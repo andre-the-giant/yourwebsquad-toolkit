@@ -4,7 +4,7 @@ Shared CLI tooling for projects based on `yourwebsquad-boilerplate`.
 
 It centralizes formatting, quality checks, dependency updaters, and page scaffolding so consumer projects stay lean and consistent.
 
-<img src="https://yourwebsquad.com/img/logo-black-square.png" width="200">
+<img src="https://yourwebsquad.com/img/logo.jpg" width="200">
 
 https://YourWebSquad.com
 
